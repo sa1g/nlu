@@ -7,6 +7,7 @@ from functools import partial
 
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
+
 class Lang:
     """
     This class computes and stores the vocabulary.
@@ -42,6 +43,7 @@ class Lang:
                     i += 1
 
         return output
+
 
 class PennTreeBank(data.Dataset):
     """
@@ -105,6 +107,7 @@ class PennTreeBank(data.Dataset):
 
         return res
 
+
 def read_file(path: str, eos_token: str = "<eos>") -> List[str]:
     """Load the corpus from a file.
 
@@ -120,6 +123,7 @@ def read_file(path: str, eos_token: str = "<eos>") -> List[str]:
         for line in f.readlines():
             output.append(line.strip() + " " + eos_token)
     return output
+
 
 def get_vocab(corpus, special_tokens=None):
     """Vocab with tokens to ids
@@ -142,6 +146,7 @@ def get_vocab(corpus, special_tokens=None):
                 output[w] = i
                 i += 1
     return output
+
 
 def collate_fn(data: PennTreeBank, pad_token: dict) -> dict:
     """
@@ -195,8 +200,12 @@ def collate_fn(data: PennTreeBank, pad_token: dict) -> dict:
     new_item["number_tokens"] = sum(lengths)
     return new_item
 
+
 def get_data_loaders(
-    train_batch_size: int = 128, eval_batch_size: int = 128, test_batch_size=128
+    train_batch_size: int = 128,
+    eval_batch_size: int = 128,
+    test_batch_size=128,
+    num_workers=0,
 ):
     """
     Retrieves the data loaders for training, evaluation, and testing.
@@ -235,16 +244,19 @@ def get_data_loaders(
         batch_size=train_batch_size,
         collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),
         shuffle=True,
+        num_workers=num_workers,
     )
     eval_loader = DataLoader(
         dev_dataset,
         batch_size=eval_batch_size,
         collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),
+        num_workers=num_workers,
     )
     test_loader = DataLoader(
         test_dataset,
         batch_size=test_batch_size,
         collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),
+        num_workers=num_workers,
     )
 
     return lang, train_loader, eval_loader, test_loader

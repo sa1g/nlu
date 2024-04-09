@@ -1,6 +1,10 @@
 import torch.nn as nn
 
 class LM_RNN(nn.Module):
+    """
+    Base RNN model for language modeling
+    """
+    
     def __init__(
         self,
         emb_size,

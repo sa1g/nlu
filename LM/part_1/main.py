@@ -10,14 +10,24 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
-
-# Rest of the code
-
-# TODO: plot the loss and the perplexity
-# TODO: tensorboard
-
-
 if __name__ == "__main__":
+    # multiprocessing.set_start_method('spawn')
+    
+    EXPERIMENT_NAME = "baseline"
+    DEVICE = "cuda:0"
+
+    # Seeding
+    torch.manual_seed(42)
+    np.random.seed(42)
+
+    ############
+    # Tensorboard
+    ############
+    
+    # Tensorboard
+    # can add a comment to the writer so that you can see some information in tensorboard
+    writer = SummaryWriter(log_dir=f"runs/{EXPERIMENT_NAME}")
+
     ############
     # Hyperparameters
     ############
@@ -26,17 +36,31 @@ if __name__ == "__main__":
     EMBEDDED_SIZE = 300
     LR = 1
     CLIP = 5
-    N_EPOCHS = 3
+    N_EPOCHS = 100
     PATIENCE = 3
-    train_batch_size = 32
-    eval_batch_size = 32
-    test_batch_size = 32
+    train_batch_size = 128
+    eval_batch_size = 128
+    test_batch_size = 128
+    
+    # Save experiment config with tensorboard
+    config = {
+        "HIDDEN_SIZE": HIDDEN_SIZE,
+        "EMBEDDED_SIZE": EMBEDDED_SIZE,
+        "LR": LR,
+        "CLIP": CLIP,
+        "N_EPOCHS": N_EPOCHS,
+        "PATIENCE": PATIENCE,
+        "train_batch_size": train_batch_size,
+        "eval_batch_size": eval_batch_size,
+        "test_batch_size": test_batch_size,
+    }
 
-    # Tensorboard
-    # can add a comment to the writer so that you can see some information in tensorboard
-    writer = SummaryWriter(log_dir="runs/LM_RNN")
-    DEVICE = "cuda:0"
+    writer.add_text("Experiment Config", str(config))
 
+    ############
+    # Data
+    ############
+    
     lang, train_loader, eval_loader, test_loader = get_data_loaders(
         train_batch_size, eval_batch_size, test_batch_size
     )
@@ -112,9 +136,9 @@ if __name__ == "__main__":
     # Save the model
     ############
 
-    # To save the model
-    # path = 'model_bin/model_name.pt'
-    # torch.save(model.state_dict(), path)
+    path = f'bin/{EXPERIMENT_NAME}.pt'
+    torch.save(model.state_dict(), path)
+    
     # To load the model you need to initialize it
     # model = LM_RNN(emb_size, hid_size, vocab_len, pad_index=lang.word2id["<pad>"]).to(device)
     # Then you load it
