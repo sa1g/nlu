@@ -65,18 +65,17 @@ if __name__ == "__main__":
     ############
     hid_size = 200
     emb_size = 300
-    out_dropout = 0.1
-    emb_dropout = 0.1
+    out_dropout = None
+    emb_dropout = None
     n_layers = 1
+    lstm = False
 
     lr = 1
     clip = 5
     device = "cuda:0"
 
-    n_epochs = 10
+    n_epochs = 5
     patience = 3
-
-    # EXPERIMENT_NAME = "lstm-do-0.1-0.1-lr-1.5-hs-300-batch-128"
 
     # Experiment also with a smaller or bigger model by changing hid and emb sizes
     # A large model tends to overfit
@@ -96,6 +95,7 @@ if __name__ == "__main__":
         out_dropout=out_dropout,
         emb_dropout=emb_dropout,
         n_layers=n_layers,
+        lstm=lstm,
     ).to(device)
     model.apply(init_weights)
 
