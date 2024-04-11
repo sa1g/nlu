@@ -1,6 +1,3 @@
-"""
-RISCRITTO
-"""
 import torch.nn as nn
 
 
@@ -19,7 +16,10 @@ class LM_RNN(nn.Module):
         emb_dropout=0.1,
         n_layers=1,
     ):
-        super(LM_RNN, self).__init__()
+        super().__init__()
+
+        self.__name__ = "LM_RNN"
+
         # Token ids to vectors, we will better see this in the next lab
         self.embedding = nn.Embedding(output_size, emb_size, padding_idx=pad_index)
         # Pytorch's RNN layer: https://pytorch.org/docs/stable/generated/torch.nn.RNN.html
