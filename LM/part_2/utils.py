@@ -1,15 +1,12 @@
-# Add functions or classes used for data loading and preprocessing
-from typing import List
-import torch
 from torch.utils import data
-from functools import partial
+import torch
 
-DEVICE = "cuda:0"  # it can be changed with 'cpu' if you do not have a gpu
+DEVICE = "cuda:0"
 
-# Loading the corpus
-
-
-def read_file(path, eos_token="<eos>"):
+def read_file(path: str, eos_token: str = "<eos>") -> list[str]:
+    """
+    Read a file and strip each letter inside of it.
+    """
     output = []
     with open(path, "r") as f:
         for line in f.readlines():
@@ -17,13 +14,22 @@ def read_file(path, eos_token="<eos>"):
     return output
 
 
-# Vocab with tokens to ids
-def get_vocab(corpus, special_tokens=[]):
+def get_vocab(corpus: list[str], special_tokens: list[str] = []) -> dict[int]:
+    """"
+    Analize a corpus (in this case a list of letters with 
+    <eos> flag) and assign in an unique way an id to each other.
+
+    This transforms the corpus from a literal "dictionary" 
+    to a numeric, trainable one.
+    """
+
     output = {}
     i = 0
+
     for st in special_tokens:
         output[st] = i
         i += 1
+
     for sentence in corpus:
         for w in sentence.split():
             if w not in output:
@@ -32,19 +38,31 @@ def get_vocab(corpus, special_tokens=[]):
     return output
 
 
-# This class computes and stores our vocab
-# Word to ids and ids to word
 class Lang:
-    def __init__(self, corpus, special_tokens=[]):
+    """
+    Class to manage the embedding from word to number and vice versa.
+    """
+
+    def __init__(self, corpus: list[str], special_tokens: list[str] = []):
         self.word2id = self.get_vocab(corpus, special_tokens)
         self.id2word = {v: k for k, v in self.word2id.items()}
 
-    def get_vocab(self, corpus, special_tokens=[]):
+    def get_vocab(self, corpus: list[str], special_tokens: list[str] = []) -> dict[int]:
+        """"
+        Analize a corpus (in this case a list of letters with 
+        <eos> flag) and assign in an unique way an id to each other.
+
+        This transforms the corpus from a literal "dictionary" 
+        to a numeric, trainable one.
+        """
+
         output = {}
         i = 0
+
         for st in special_tokens:
             output[st] = i
             i += 1
+
         for sentence in corpus:
             for w in sentence.split():
                 if w not in output:
@@ -54,37 +72,30 @@ class Lang:
 
 
 class PennTreeBank(data.Dataset):
-    # Mandatory methods are __init__, __len__ and __getitem__
-    def __init__(self, corpus, lang):
+    def __init__(self, corpus:list[str], lang: Lang):
         self.source = []
         self.target = []
 
         for sentence in corpus:
-            self.source.append(
-                sentence.split()[0:-1]
-            )  # We get from the first token till the second-last token
-            self.target.append(
-                sentence.split()[1:]
-            )  # We get from the second token till the last token
-            # See example in section 6.2
+            # Get from the first token till the second-last 
+            self.source.append(sentence.split()[0:-1])
+            # Get from the second token till the last token
+            self.target.append(sentence.split()[1:])
 
         self.source_ids = self.mapping_seq(self.source, lang)
         self.target_ids = self.mapping_seq(self.target, lang)
 
     def __len__(self):
         return len(self.source)
+    
+    def __getitem__(self, index) -> dict[torch.LongTensor]:
+        src = torch.LongTensor(self.source_ids[index])
+        trg = torch.LongTensor(self.target_ids[index])
 
-    def __getitem__(self, idx):
-        src = torch.LongTensor(self.source_ids[idx])
-        trg = torch.LongTensor(self.target_ids[idx])
         sample = {"source": src, "target": trg}
         return sample
 
-    # Auxiliary methods
-
-    def mapping_seq(
-        self, data, lang
-    ):  # Map sequences of tokens to corresponding computed in Lang class
+    def mapping_seq(self, data: list[str, int] , lang: Lang) -> list[int]:
         res = []
         for seq in data:
             tmp_seq = []
@@ -93,13 +104,11 @@ class PennTreeBank(data.Dataset):
                     tmp_seq.append(lang.word2id[x])
                 else:
                     print("OOV found!")
-                    print(
-                        "You have to deal with that"
-                    )  # PennTreeBank doesn't have OOV but "Trust is good, control is better!"
+                    print("Manage it yourself GLHF")
                     break
             res.append(tmp_seq)
         return res
-
+    
 
 def collate_fn(data, pad_token):
     def merge(sequences):

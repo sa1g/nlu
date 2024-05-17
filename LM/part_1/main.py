@@ -1,210 +1,160 @@
-import copy
-import math
-import numpy as np
-import torch
-from tqdm import tqdm
-import torch.nn as nn
-import torch.optim as optim
+from functions import (
+    get_model,
+    get_optimizer,
+    init_weights,
+    train,
+    get_loaders_lang,
+)
 from torch.utils.tensorboard import SummaryWriter
-from torch.utils.data import DataLoader
+import logging
+import json
 
-from utils import read_file, get_vocab, Lang, PennTreeBank, collate_fn
-from functions import eval_loop, init_weights, train_loop
-from model import LM_RNN
-from functools import partial
+logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.INFO)
+
+
+import argparse
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument("-c", default="config.json", help="Config file json")
+
+
+def main(
+    dataset_path,
+    train_batch_size,
+    dev_batch_size,
+    test_batch_size,
+    emb_size,
+    hid_size,
+    emb_dropout,
+    out_dropout,
+    n_layers,
+    lr,
+    n_epochs,
+    clip,
+    model_type,
+    optim_name,
+    betas,
+    eps,
+    weight_decay,
+):
+    # dataset/ptb.test.txt
+    train_loader, dev_loader, test_loader, lang = get_loaders_lang(
+        dataset_path, train_batch_size, dev_batch_size, test_batch_size
+    )
+
+    vocab_len = len(lang.word2id)
+    pad_index = lang.word2id["<pad>"]
+    output_size = vocab_len
+
+    # MODEL SETUP
+    model = get_model(
+        emb_size=emb_size,
+        hid_size=hid_size,
+        output_size=output_size,
+        pad_index=pad_index,
+        emb_dropout=emb_dropout,
+        out_dropout=out_dropout,
+        n_layers=n_layers,
+        device=DEVICE,
+        init_weights=init_weights,
+        model_type=model_type,
+    )
+
+    optimizer = get_optimizer(
+        model,
+        optim_name=optim_name,
+        lr=lr,
+        betas=betas,
+        eps=eps,
+        weight_decay=weight_decay,
+    )
+
+    logging.debug("Model done")
+
+    # TENSORBOARD
+    writer: SummaryWriter = SummaryWriter(log_dir=f"log/{model.name}")
+
+    if optim_name == "AdamW":
+        config = {
+            "emb_size": emb_size,
+            "hid_size": hid_size,
+            "emb_dropout": emb_dropout,
+            "out_dropout": out_dropout,
+            "n_layers": n_layers,
+            "lr": lr,
+            "train_batch_size": train_batch_size,
+            "dev_batch_size": dev_batch_size,
+            "test_batch_size": test_batch_size,
+            "n_epochs": n_epochs,
+            "optim_name": optim_name,
+            "betas": betas,
+            "eps": eps,
+            "weight_decay": weight_decay,
+        }
+    else:
+        config = {
+            "emb_size": emb_size,
+            "hid_size": hid_size,
+            "emb_dropout": emb_dropout,
+            "out_dropout": out_dropout,
+            "n_layers": n_layers,
+            "lr": lr,
+            "train_batch_size": train_batch_size,
+            "dev_batch_size": dev_batch_size,
+            "test_batch_size": test_batch_size,
+            "n_epochs": n_epochs,
+        }
+
+    # TRAINING
+    train(
+        model=model,
+        optimizer=optimizer,
+        lang=lang,
+        writer=writer,
+        n_epochs=n_epochs,
+        clip=clip,
+        train_loader=train_loader,
+        dev_loader=dev_loader,
+        test_loader=test_loader,
+        device=DEVICE,
+    )
+
+
+def load_config(config_file):
+    with open(config_file, "r") as file:
+        configs = json.load(file)
+    return configs
 
 
 if __name__ == "__main__":
     DEVICE = "cuda:0"
 
-    ############
-    # Load Data
-    ############
+    args = parser.parse_args()
+    config : dict = load_config(args.c)
 
-    train_raw = read_file("../dataset/ptb.train.txt")
-    dev_raw = read_file("../dataset/ptb.valid.txt")
-    test_raw = read_file("../dataset/ptb.test.txt")
+    for key, config in config.items():
+        logging.info(" !! Running %s !! ", key)
 
-    vocab = get_vocab(train_raw, ["<pad>", "<eos>"])
+        assert config.get("model_type", "LM_RNN") in ["LM_RNN", "LM_LSTM"]
+        assert config.get("optim_name", "SGD") in ["SGD", "AdamW"]
 
-    print(len(vocab))
-
-    lang = Lang(train_raw, ["<pad>", "<eos>"])
-
-    train_batch_size = 128
-    dev_batch_size = 128
-    test_batch_size = 128
-
-    train_dataset = PennTreeBank(train_raw, lang)
-    dev_dataset = PennTreeBank(dev_raw, lang)
-    test_dataset = PennTreeBank(test_raw, lang)
-
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=train_batch_size,
-        collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),
-        shuffle=True,
-    )
-    dev_loader = DataLoader(
-        dev_dataset,
-        batch_size=dev_batch_size,
-        collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),
-    )
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=test_batch_size,
-        collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),
-    )
-
-    vocab_len = len(lang.word2id)
-
-    ############
-    # Hyperparameters
-    ############
-    """
-    # baseline
-    # baseline lr 1
-    # baseline lr 2
-    hses 500
-    hses 300
-
-    nlayers 2
-
-    lstm
-    """
-    hid_size = 300
-    emb_size = 300
-    out_dropout = 0.2
-    emb_dropout = 0.2
-    n_layers = 1
-    lstm = True
-    adam = True
-
-    lr = 1e-3
-    clip = 5
-    device = "cuda:0"
-
-    n_epochs = 100
-    patience = 3
-
-    # Experiment also with a smaller or bigger model by changing hid and emb sizes
-    # A large model tends to overfit
-    # Don't forget to experiment with a lower training batch size
-    # Increasing the back propagation steps can be seen as a regularization step
-    # With SGD try with an higher learning rate (> 1 for instance)
-
-    ############
-    # Model
-    ############
-    model = LM_RNN(
-        emb_size,
-        hid_size,
-        vocab_len,
-        pad_index=lang.word2id["<pad>"],
-        out_dropout=out_dropout,
-        emb_dropout=emb_dropout,
-        n_layers=n_layers,
-        lstm=lstm,
-    ).to(device)
-    model.apply(init_weights)
-
-    ############
-    # Optimizer and Loss
-    ############
-    if (not adam):
-        optimizer = optim.SGD(model.parameters(), lr=lr)
-    else:
-        optimizer = optim.AdamW(model.parameters(), lr=lr, betas=(
-            0.9, 0.999), eps=1e-08, weight_decay=0.01)
-
-    criterion_train = nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"])
-    criterion_eval = nn.CrossEntropyLoss(
-        ignore_index=lang.word2id["<pad>"], reduction="sum"
-    )
-
-    ############
-    # Tensorboard
-    ############
-    if (not adam):
-        EXPERIMENT_NAME = f"{model.__name__}-{optimizer.__class__.__name__}-hs-{hid_size}-es-{emb_size}-od-{out_dropout}-ed-{emb_dropout}-n_layers-{n_layers}-lr-{lr}-batch-{train_batch_size}-epochs-{n_epochs}"
-    else:
-        EXPERIMENT_NAME = f"{model.__name__}-{optimizer.__class__.__name__}-hs-{hid_size}-es-{emb_size}-od-{out_dropout}-ed-{emb_dropout}-n_layers-{n_layers}-lr-{lr}-batch-{train_batch_size}-epochs-{n_epochs}-adam"
-
-    # EXPERIMENT_NAME = f"baseline-lr-2"
-
-    writer = SummaryWriter(log_dir=f"runs/{EXPERIMENT_NAME}")
-
-    config = {
-        "hid_size": hid_size,
-        "emb_size": emb_size,
-        "out_dropout": out_dropout,
-        "emb_dropout": emb_dropout,
-        "n_layers": n_layers,
-        "lr": lr,
-        "clip": clip,
-        "epochs": n_epochs,
-        "patience": patience,
-        "train_batch_size": train_batch_size,
-        "dev_batch_size": dev_batch_size,
-        "test_batch_size": test_batch_size,
-    }
-    writer.add_text("Experiment Config", str(config))
-
-    ############
-    # Training
-    ############
-
-    losses_train = []
-    losses_dev = []
-    sampled_epochs = []
-    best_ppl = math.inf
-    best_model = None
-    pbar = tqdm(range(1, n_epochs))
-
-    # If the PPL is too high try to change the learning rate
-    for epoch in pbar:
-        loss = train_loop(train_loader, optimizer,
-                          criterion_train, model, clip)
-
-        if epoch % 1 == 0:
-            sampled_epochs.append(epoch)
-
-            losses_train.append(np.asarray(loss).mean())
-            ppl_dev, loss_dev = eval_loop(dev_loader, criterion_eval, model)
-            losses_dev.append(np.asarray(loss_dev).mean())
-
-            pbar.set_description("PPL: %f" % ppl_dev)
-
-            writer.add_scalar("Loss/Train", losses_train[-1], epoch)
-            writer.add_scalar("Loss/Test", losses_dev[-1], epoch)
-            writer.add_scalar("PPL/Test", ppl_dev, epoch)
-
-            if ppl_dev < best_ppl:
-                best_ppl = ppl_dev
-                best_model = copy.deepcopy(model).to("cpu")
-                patience = 3
-            else:
-                patience -= 1
-
-            if patience <= 0:
-                break
-
-    best_model.to(device)
-
-    final_ppl, _ = eval_loop(test_loader, criterion_eval, best_model)
-    writer.add_scalar("PPL/Eval", final_ppl, len(sampled_epochs))
-    print("Test ppl: ", final_ppl)
-
-    writer.close()
-
-    ############
-    # Save the model
-    ############
-
-    path = f"bin/{EXPERIMENT_NAME}.pt"
-    torch.save(model.state_dict(), path)
-
-    # # To load the model you need to initialize it
-    # # model = LM_RNN(emb_size, hid_size, vocab_len, pad_index=lang.word2id["<pad>"]).to(device)
-    # # Then you load it
-    # # model.load_state_dict(torch.load(path))
+        main(
+            dataset_path=config.get("dataset_path", "../dataset"),
+            train_batch_size=config.get("train_batch_size", 128),
+            dev_batch_size=config.get("dev_batch_size", 128),
+            test_batch_size=config.get("test_batch_size", 128),
+            emb_size=config.get("emb_size", 300),
+            hid_size=config.get("hid_size", 300),
+            emb_dropout=config.get("emb_dropout", 0),
+            out_dropout=config.get("out_dropout", 0),
+            n_layers=config.get("n_layers", 1),
+            lr=config.get("lr", 0.0001),
+            n_epochs=config.get("n_epochs", 1),
+            clip=config.get("clip", 5),
+            model_type=config.get("model_type", "LM_RNN"),
+            optim_name=config.get("optim_name", "SGD"),
+            betas=config.get("betas", (0.9, 0.999)),
+            eps=config.get("eps", 1e-08),
+            weight_decay=config.get("weight_decay", 0.01),
+        )

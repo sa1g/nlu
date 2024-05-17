@@ -1,7 +1,7 @@
 {
     "experiment1": {
         "model_type": "LM_LSTM",
-        "dataset_path": "dataset",
+        "dataset_path": "../dataset",
         "train_batch_size": 128,
         "dev_batch_size": 128,
         "test_batch_size": 128,
@@ -16,7 +16,7 @@
     },
     "experiment2": {
         "model_type": "LM_LSTM",
-        "dataset_path": "dataset",
+        "dataset_path": "../dataset",
         "train_batch_size": 128,
         "dev_batch_size": 128,
         "test_batch_size": 128,
