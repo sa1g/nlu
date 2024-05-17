@@ -159,7 +159,7 @@ def train(
     lang: Lang,
     writer,
     n_epochs,
-    clip:int,
+    clip: int,
     train_loader: DataLoader,
     dev_loader: DataLoader,
     test_loader: DataLoader,
@@ -179,7 +179,7 @@ def train(
     sampled_epochs = []
     best_ppl = math.inf
     best_model = None
-    
+
     logging.debug("Training")
     pbar = tqdm(range(1, n_epochs))
 
@@ -214,7 +214,7 @@ def train(
 
     final_ppl, _ = eval_loop(test_loader, criterion_eval, best_model)
     writer.add_scalar("PPL/Eval", final_ppl, len(sampled_epochs))
-    logging.info("Test ppl: ", final_ppl)
+    logging.info("Test ppl: %f", final_ppl)
 
     path = f"bin/{best_model.name}.pt"
     torch.save(best_model.state_dict(), path)

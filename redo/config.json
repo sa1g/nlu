@@ -1,0 +1,17 @@
+{
+    "experiment1": {
+        "model_type": "LM_RNN",
+        "dataset_path": "dataset",
+        "train_batch_size": 128,
+        "dev_batch_size": 128,
+        "test_batch_size": 128,
+        "emb_size": 300,
+        "hid_size": 300,
+        "emb_dropout": 0,
+        "out_dropout": 0,
+        "n_layers": 2,
+        "lr": 2,
+        "n_epochs": 10,
+        "clip": 5
+    }
+}
