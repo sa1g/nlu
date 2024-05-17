@@ -33,6 +33,10 @@ def main(
     n_epochs,
     clip,
     model_type,
+    optim_name,
+    betas,
+    eps,
+    weight_decay,
 ):
     # dataset/ptb.test.txt
     train_loader, dev_loader, test_loader, lang = get_loaders_lang(
@@ -57,24 +61,50 @@ def main(
         model_type=model_type,
     )
 
-    optimizer = get_optimizer(model, optim_name="SGD", lr=lr)
+    optimizer = get_optimizer(
+        model,
+        optim_name=optim_name,
+        lr=lr,
+        betas=betas,
+        eps=eps,
+        weight_decay=weight_decay,
+    )
 
     logging.debug("Model done")
 
     # TENSORBOARD
     writer: SummaryWriter = SummaryWriter(log_dir=f"log/{model.name}")
 
-    config = {
-        "emb_size": emb_size,
-        "hid_size": hid_size,
-        "emb_dropout": emb_dropout,
-        "out_dropout": out_dropout,
-        "n_layers": n_layers,
-        "lr": lr,
-        "train_batch_size": train_batch_size,
-        "dev_batch_size": dev_batch_size,
-        "test_batch_size": test_batch_size,
-    }
+    if optim_name == "AdamW":
+        config = {
+            "emb_size": emb_size,
+            "hid_size": hid_size,
+            "emb_dropout": emb_dropout,
+            "out_dropout": out_dropout,
+            "n_layers": n_layers,
+            "lr": lr,
+            "train_batch_size": train_batch_size,
+            "dev_batch_size": dev_batch_size,
+            "test_batch_size": test_batch_size,
+            "n_epochs": n_epochs,
+            "optim_name": optim_name,
+            "betas": betas,
+            "eps": eps,
+            "weight_decay": weight_decay,
+        }
+    else:
+        config = {
+            "emb_size": emb_size,
+            "hid_size": hid_size,
+            "emb_dropout": emb_dropout,
+            "out_dropout": out_dropout,
+            "n_layers": n_layers,
+            "lr": lr,
+            "train_batch_size": train_batch_size,
+            "dev_batch_size": dev_batch_size,
+            "test_batch_size": test_batch_size,
+            "n_epochs": n_epochs,
+        }
 
     # TRAINING
     train(
@@ -104,21 +134,25 @@ if __name__ == "__main__":
     config = load_config(args.c)
 
     for config in config.values():
-        assert config["model_type"] in ["LM_RNN"]
+        assert config.get("model_type", "LM_RNN") in ["LM_RNN", "LM_LSTM"]
+        assert config.get("optim_name", "SGD") in ["SGD", "AdamW"]
 
-        if config["model_type"] == "LM_RNN":
-            main(
-                dataset_path=config["dataset_path"],
-                train_batch_size=config["train_batch_size"],
-                dev_batch_size=config["dev_batch_size"],
-                test_batch_size=config["test_batch_size"],
-                emb_size=config["emb_size"],
-                hid_size=config["hid_size"],
-                emb_dropout=config["emb_dropout"],
-                out_dropout=config["out_dropout"],
-                n_layers=config["n_layers"],
-                lr=config["lr"],
-                n_epochs=config["n_epochs"],
-                clip=config["clip"],
-                model_type=config["model_type"],
-            )
+        main(
+            dataset_path=config.get("dataset_path", "dataset"),
+            train_batch_size=config.get("train_batch_size", 128),
+            dev_batch_size=config.get("dev_batch_size", 128),
+            test_batch_size=config.get("test_batch_size", 128),
+            emb_size=config.get("emb_size", 300),
+            hid_size=config.get("hid_size", 300),
+            emb_dropout=config.get("emb_dropout", 0),
+            out_dropout=config.get("out_dropout", 0),
+            n_layers=config.get("n_layers", 1),
+            lr=config.get("lr", 0.0001),
+            n_epochs=config.get("n_epochs", 1),
+            clip=config.get("clip", 5),
+            model_type=config.get("model_type", "LM_RNN"),
+            optim_name=config.get("optim_name", "SGD"),
+            betas=config.get("betas", (0.9, 0.999)),
+            eps=config.get("eps", 1e-08),
+            weight_decay=config.get("weight_decay", 0.01),
+        )

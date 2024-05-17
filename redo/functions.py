@@ -10,8 +10,8 @@ import logging
 
 from tqdm import tqdm
 
-from utils import read_file, get_vocab, Lang, PennTreeBank, collate_fn
-from model import LM_RNN
+from utils import read_file, Lang, PennTreeBank, collate_fn
+from model import LM_RNN, LM_LSTM
 
 
 def init_weights(mat):
@@ -127,9 +127,17 @@ def get_model(
     init_weights=False,
     model_type: str = "LM_RNN",
 ) -> nn.Module:
-    assert model_type in ["LM_RNN"]
-
     if model_type == "LM_RNN":
+        model = LM_RNN(
+            emb_size,
+            hid_size,
+            output_size,
+            pad_index,
+            emb_dropout,
+            out_dropout,
+            n_layers,
+        ).to(device)
+    elif model_type == "LM_LSTM":
         model = LM_RNN(
             emb_size,
             hid_size,
@@ -146,11 +154,13 @@ def get_model(
     return model
 
 
-def get_optimizer(model: nn.Module, optim_name: str = "SGD", lr: float = 0.0001):
-    assert optim_name in ["SGD"]
-
+def get_optimizer(model: nn.Module, optim_name: str = "SGD", lr: float = 0.0001, betas=(0.9, 0.999), eps=1e-08, weight_decay=0.01):
     if optim_name == "SGD":
         return optim.SGD(model.parameters(), lr=lr)
+    elif optim_name == "AdamW":
+        return optim.AdamW(
+            model.parameters(), lr=lr, betas=betas, eps=eps, weight_decay=weight_decay
+        )
 
 
 def train(
