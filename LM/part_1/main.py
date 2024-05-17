@@ -15,17 +15,15 @@ from functools import partial
 
 
 if __name__ == "__main__":
-    # multiprocessing.set_start_method('spawn')
-
     DEVICE = "cuda:0"
 
     ############
     # Load Data
     ############
 
-    train_raw = read_file("dataset/ptb.train.txt")
-    dev_raw = read_file("dataset/ptb.valid.txt")
-    test_raw = read_file("dataset/ptb.test.txt")
+    train_raw = read_file("../dataset/ptb.train.txt")
+    dev_raw = read_file("../dataset/ptb.valid.txt")
+    test_raw = read_file("../dataset/ptb.test.txt")
 
     vocab = get_vocab(train_raw, ["<pad>", "<eos>"])
 
@@ -33,9 +31,9 @@ if __name__ == "__main__":
 
     lang = Lang(train_raw, ["<pad>", "<eos>"])
 
-    train_batch_size = 256
-    dev_batch_size = 256
-    test_batch_size = 256
+    train_batch_size = 128
+    dev_batch_size = 128
+    test_batch_size = 128
 
     train_dataset = PennTreeBank(train_raw, lang)
     dev_dataset = PennTreeBank(dev_raw, lang)
@@ -63,18 +61,30 @@ if __name__ == "__main__":
     ############
     # Hyperparameters
     ############
-    hid_size = 200
-    emb_size = 300
-    out_dropout = None
-    emb_dropout = None
-    n_layers = 1
-    lstm = False
+    """
+    # baseline
+    # baseline lr 1
+    # baseline lr 2
+    hses 500
+    hses 300
 
-    lr = 1
+    nlayers 2
+
+    lstm
+    """
+    hid_size = 300
+    emb_size = 300
+    out_dropout = 0.2
+    emb_dropout = 0.2
+    n_layers = 1
+    lstm = True
+    adam = True
+
+    lr = 1e-3
     clip = 5
     device = "cuda:0"
 
-    n_epochs = 5
+    n_epochs = 100
     patience = 3
 
     # Experiment also with a smaller or bigger model by changing hid and emb sizes
@@ -86,7 +96,6 @@ if __name__ == "__main__":
     ############
     # Model
     ############
-
     model = LM_RNN(
         emb_size,
         hid_size,
@@ -102,8 +111,12 @@ if __name__ == "__main__":
     ############
     # Optimizer and Loss
     ############
+    if (not adam):
+        optimizer = optim.SGD(model.parameters(), lr=lr)
+    else:
+        optimizer = optim.AdamW(model.parameters(), lr=lr, betas=(
+            0.9, 0.999), eps=1e-08, weight_decay=0.01)
 
-    optimizer = optim.SGD(model.parameters(), lr=lr)
     criterion_train = nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"])
     criterion_eval = nn.CrossEntropyLoss(
         ignore_index=lang.word2id["<pad>"], reduction="sum"
@@ -112,8 +125,12 @@ if __name__ == "__main__":
     ############
     # Tensorboard
     ############
+    if (not adam):
+        EXPERIMENT_NAME = f"{model.__name__}-{optimizer.__class__.__name__}-hs-{hid_size}-es-{emb_size}-od-{out_dropout}-ed-{emb_dropout}-n_layers-{n_layers}-lr-{lr}-batch-{train_batch_size}-epochs-{n_epochs}"
+    else:
+        EXPERIMENT_NAME = f"{model.__name__}-{optimizer.__class__.__name__}-hs-{hid_size}-es-{emb_size}-od-{out_dropout}-ed-{emb_dropout}-n_layers-{n_layers}-lr-{lr}-batch-{train_batch_size}-epochs-{n_epochs}-adam"
 
-    EXPERIMENT_NAME = f"{model.__name__}-{optimizer.__class__.__name__}-hs-{hid_size}-es-{emb_size}-od-{out_dropout}-ed-{emb_dropout}-n_layers-{n_layers}-lr-{lr}-batch-{train_batch_size}-epochs-{n_epochs}"
+    # EXPERIMENT_NAME = f"baseline-lr-2"
 
     writer = SummaryWriter(log_dir=f"runs/{EXPERIMENT_NAME}")
 
@@ -146,7 +163,8 @@ if __name__ == "__main__":
 
     # If the PPL is too high try to change the learning rate
     for epoch in pbar:
-        loss = train_loop(train_loader, optimizer, criterion_train, model, clip)
+        loss = train_loop(train_loader, optimizer,
+                          criterion_train, model, clip)
 
         if epoch % 1 == 0:
             sampled_epochs.append(epoch)

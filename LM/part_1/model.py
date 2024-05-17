@@ -21,7 +21,8 @@ class LM_RNN(nn.Module):
 
         self.switch = 0
 
-        self.embedding = nn.Embedding(output_size, emb_size, padding_idx=pad_index)
+        self.embedding = nn.Embedding(
+            output_size, emb_size, padding_idx=pad_index)
 
         if emb_dropout is not None:
             self.switch = 1
@@ -29,23 +30,23 @@ class LM_RNN(nn.Module):
 
         if lstm is True:
             self.__name__ = "LSTM"
-            self.rnn = nn.LSTM(emb_size, hidden_size, n_layers, bidirectional=False)
+            self.rnn = nn.LSTM(emb_size, hidden_size,
+                               n_layers, bidirectional=False)
         else:
             self.__name__ = "RNN"
-            self.rnn = nn.RNN(emb_size, hidden_size, n_layers, bidirectional=False)
-        
+            self.rnn = nn.RNN(emb_size, hidden_size,
+                              n_layers, bidirectional=False)
+
         if out_dropout is not None:
             self.switch = 2
             self.out_dropout = nn.Dropout(out_dropout)
-        
+
         if emb_dropout is not None and out_dropout is not None:
             self.switch = 3
-        
+
         self.pad_token = pad_index
 
         self.output = nn.Linear(hidden_size, output_size)
-        
-        
 
     def forward(self, input_sequence):
         # Horrible implementation but it works
@@ -69,5 +70,5 @@ class LM_RNN(nn.Module):
             rnn_out, _ = self.rnn(emb)
             rnn_out = self.out_dropout(rnn_out)
             output = self.output(rnn_out).permute(0, 2, 1)
-        
+
         return output
