@@ -9,7 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 import logging
 import json
 
-logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.INFO)
+logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.DEBUG)
 
 
 import argparse
@@ -37,6 +37,9 @@ def main(
     betas,
     eps,
     weight_decay,
+    variational_dropout,
+    momentum,
+    non_monotonic_interval
 ):
     # dataset/ptb.test.txt
     train_loader, dev_loader, test_loader, lang = get_loaders_lang(
@@ -47,27 +50,53 @@ def main(
     pad_index = lang.word2id["<pad>"]
     output_size = vocab_len
 
+    if model_type in ["LM_RNN", "LM_LSTM", "LM_LSTM_WS"]:
+        model_conifg = {
+            "emb_size": emb_size,
+            "hid_size": hid_size,
+            "output_size": output_size,
+            "pad_index": pad_index,
+            "emb_dropout": emb_dropout,
+            "out_dropout": out_dropout,
+            "n_layers": n_layers,
+            "device": DEVICE,
+            "init_weights": init_weights,
+            "model_type": model_type,
+        }
+    elif model_type == "LM_LSTM_VD":
+        model_conifg = {
+            "emb_size": emb_size,
+            "hid_size": hid_size,
+            "output_size": output_size,
+            "pad_index": pad_index,
+            "variational_dropout": variational_dropout,
+            "n_layers": n_layers,
+            "device": DEVICE,
+            "init_weights": init_weights,
+            "model_type": model_type,
+        }
     # MODEL SETUP
     model = get_model(
-        emb_size=emb_size,
-        hid_size=hid_size,
-        output_size=output_size,
-        pad_index=pad_index,
-        emb_dropout=emb_dropout,
-        out_dropout=out_dropout,
-        n_layers=n_layers,
+        model_conifg,
         device=DEVICE,
         init_weights=init_weights,
-        model_type=model_type,
+        model_type=model_type
     )
+
+    model_config = {
+        "betas":betas,
+        "eps":eps,
+        "weight_decay":weight_decay,
+        "momentum": momentum,
+        "logging_interval": train_batch_size,
+        "non_monotonic_interval": non_monotonic_interval
+    }
 
     optimizer = get_optimizer(
         model,
         optim_name=optim_name,
         lr=lr,
-        betas=betas,
-        eps=eps,
-        weight_decay=weight_decay,
+        config=model_config,
     )
 
     logging.debug("Model done")
@@ -131,12 +160,12 @@ if __name__ == "__main__":
     DEVICE = "cuda:0"
 
     args = parser.parse_args()
-    config : dict = load_config(args.c)
+    config: dict = load_config(args.c)
 
     for key, config in config.items():
         logging.info(" !! Running %s !! ", key)
-        assert config.get("model_type", "LM_RNN") in ["LM_RNN", "LM_LSTM"]
-        assert config.get("optim_name", "SGD") in ["SGD", "AdamW"]
+        assert config.get("model_type", "LM_RNN") in ["LM_RNN", "LM_LSTM", "LM_LSTM_WS"]
+        assert config.get("optim_name", "SGD") in ["SGD", "AdamW", "NonMonotonicAvSGD"]
 
         main(
             dataset_path=config.get("dataset_path", "../dataset"),
@@ -156,4 +185,7 @@ if __name__ == "__main__":
             betas=config.get("betas", (0.9, 0.999)),
             eps=config.get("eps", 1e-08),
             weight_decay=config.get("weight_decay", 0.01),
+            variational_dropout=config.get("variational_dropout", 0.2),
+            momentum = config.get("momentum", 0),
+        non_monotonic_interval = config.get("non_monotonic_interval", 5)
         )

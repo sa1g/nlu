@@ -20,7 +20,8 @@ hidden transition within an RNN, we use variational dropout for all other dropou
 ically using the same dropout mask for all inputs and outputs of the LSTM within a given forward
 and backward pass. Each example within the minibatch uses a unique dropout mask, rather than a
 single dropout mask being used over all examples, ensuring diversity in the elements dropped out.
-- 3. Non-monotonically Triggered AvSGD 
+- 3 Non-monotonically Triggered AvSGD ( reducing the risk of overfitting and eventually leading to a better estimate for our model parameters.we only trigger the averaging step when a certain validation metric fails to improve for multiple cycles. This "non-monotonic" criterion ensures that the randomness of training does not play a major role in the decision to average, resulting in a better estimate for our parameters. The conservative nature of the criterion also ensures that we only take the averaging step when we are certain of its necessity, further reducing the risk of overfitting and leading to a more generalizable model.
+)
 
 
 These techniques are described in [this paper](https://openreview.net/pdf?id=SyyGPP0TZ).
