@@ -73,8 +73,8 @@ if __name__ == "__main__":
 
     for key, config in config.items():
         logging.info(" !! Running %s !! ", key)
-        assert config.get("model_type", "LM_RNN") in ["LM_RNN", "LM_LSTM", "LM_LSTM_WS"]
-        assert config.get("optim_name", "SGD") in ["SGD", "AdamW", "NonMonotonicAvSGD"]
+        assert config.get("model_type", "LM_RNN") in ["LM_RNN", "LM_LSTM"]
+        assert config.get("optim_name", "SGD") in ["SGD", "AdamW", "nmASGD"]
 
         train_config = {
             "dataset_path": config.get("dataset_path", "../dataset"),
@@ -92,7 +92,9 @@ if __name__ == "__main__":
             "out_dropout": config.get("out_dropout", 0),
             "n_layers": config.get("n_layers", 1),
             "model_type": config.get("model_type", "LM_RNN"),
-            "variational_dropout": config.get("variational_dropout", 0.2),
+            "variational_dropout": config.get("variational_dropout", 0),
+            "weight_tying": config.get("weight_tying", False),
+            "optim_name": config.get("optim_name", "SGD"),
         }
 
         optimizer_config = {

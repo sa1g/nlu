@@ -12,7 +12,7 @@ import logging
 from tqdm import tqdm
 
 from utils import read_file, Lang, PennTreeBank, collate_fn
-from model import LM_RNN, LM_LSTM, LM_LSTM_WS, LM_LSTM_VD
+from model import LM_RNN, LM_LSTM
 
 
 def init_weights(mat):
@@ -37,7 +37,6 @@ def init_weights(mat):
 
 
 def train_loop(data, optimizer, criterion, model: torch.nn.Module, clip=5):
-    logging.debug("Rolling a batch")
     model.train()
     loss_array = []
     number_of_tokens = []
@@ -53,7 +52,6 @@ def train_loop(data, optimizer, criterion, model: torch.nn.Module, clip=5):
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
         optimizer.step()
 
-    logging.debug("Batch rolling done")
     return sum(loss_array) / sum(number_of_tokens)
 
 
@@ -118,10 +116,7 @@ def get_loaders_lang(
     return train_loader, dev_loader, test_loader, lang
 
 
-def get_model(
-    config: dict,
-    device
-) -> nn.Module:
+def get_model(config: dict, device) -> nn.Module:
     if config["model_type"] == "LM_RNN":
         logging.debug("LM_RNN")
         model = LM_RNN(config).to(device)
@@ -150,15 +145,15 @@ def get_optimizer(model: nn.Module, config: dict = {}):
             eps=config["eps"],
             weight_decay=config["weight_decay"],
         )
-    elif config["optim_name"] == "NonMonotonicAvSGD":
-        return NonMonotonicAvSGD(
+    elif config["optim_name"] == "nmASGD":
+        return optim.ASGD(
             model.parameters(),
-            lr=config["lr"],
-            momentum=config["momentum"],
-            weight_decay=config["weight_decay"],
-            logging_interval=config["logging_interval"],
-            non_monotonic_interval=config["non_monotonic_interval"],
+            lr=1e-2,
+            t0=config.get("t0", 1e6),
+            weight_decay=0
         )
+
+    SystemError()
 
 
 def train(
@@ -181,8 +176,16 @@ def train(
     criterion_eval = torch.nn.CrossEntropyLoss(
         ignore_index=lang.word2id["<pad>"], reduction="sum"
     )
-    
-    optimizer = get_optimizer(model=model, config=optimizer_config)
+
+    if optimizer_config["optim_name"] == "nmASGD":
+        config = copy.deepcopy(optimizer_config)
+        config["optim_name"] = "SGD"
+        optimizer = get_optimizer(model=model, config=config)
+
+        del config
+    else:
+        optimizer = get_optimizer(model=model, config=optimizer_config)
+
     logging.debug(f"Got Optimizer: {optimizer.__class__.__name__}")
 
     losses_train = []
@@ -210,16 +213,43 @@ def train(
             writer.add_scalar("Loss/Test", losses_dev[-1], epoch)
             writer.add_scalar("PPL/Test", ppl_dev, epoch)
 
+            # early stopping deactivated
             if ppl_dev < best_ppl:
                 best_ppl = ppl_dev
                 best_model = copy.deepcopy(model).to("cpu")
-                patience = 3
+                patience = 10
             else:
                 patience -= 1
 
             if patience <= 0:
+                logging.info("My patience is done!")
                 break
-        
+
+        logging.debug(f"Running optimizer: {optimizer.__class__.__name__}")
+        logging.debug(f"t0 in stuff: {'t0' not in optimizer.param_groups[0]}")
+        logging.debug(f"val to switch {optimizer_config['non_monotonic_interval']}")
+        logging.debug(f"losses_dev len: {len(losses_dev)}")
+        logging.debug(f"optim target: {optimizer_config['optim_name']}")
+
+        if len(losses_dev) > 6:
+            logging.debug(
+                f"last stuff: {loss_dev > min(losses_dev[: -optimizer_config['non_monotonic_interval']])}"
+            )
+            logging.debug(
+                min(losses_dev[: -optimizer_config["non_monotonic_interval"]])
+            )
+
+        if (
+            optimizer.__class__.__name__ == "SGD"
+            and "t0" not in optimizer.param_groups[0]
+            and len(losses_dev) > optimizer_config["non_monotonic_interval"]
+            and loss_dev
+            > min(losses_dev[: -optimizer_config["non_monotonic_interval"]])
+            and optimizer_config["optim_name"] == "nmASGD"
+        ):
+            optimizer = get_optimizer(model=model, config=optimizer_config)
+            logging.debug(f"Got Optimizer: {optimizer.__class__.__name__}")
+
     logging.debug("Done")
 
     best_model.to(device)
@@ -232,135 +262,135 @@ def train(
     torch.save(best_model.state_dict(), path)
 
 
-class NonMonotonicAvSGD(Optimizer):
-    def __init__(
-        self,
-        params,
-        lr=required,
-        momentum=0,
-        weight_decay=0,
-        logging_interval=10,
-        non_monotonic_interval=5,
-    ):
-        if lr is not required and lr < 0.0:
-            raise ValueError("Invalid learning rate: {}".format(lr))
-        if momentum < 0.0 or momentum >= 1.0:
-            raise ValueError("Invalid momentum value: {}".format(momentum))
-        if weight_decay < 0.0:
-            raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
-        if logging_interval <= 0:
-            raise ValueError(
-                "Invalid logging_interval value: {}".format(logging_interval)
-            )
-        if non_monotonic_interval <= 0:
-            raise ValueError(
-                "Invalid non_monotonic_interval value: {}".format(
-                    non_monotonic_interval
-                )
-            )
+# class NonMonotonicAvSGD(Optimizer):
+#     def __init__(
+#         self,
+#         params,
+#         lr=required,
+#         momentum=0,
+#         weight_decay=0,
+#         logging_interval=10,
+#         non_monotonic_interval=5,
+#     ):
+#         if lr is not required and lr < 0.0:
+#             raise ValueError("Invalid learning rate: {}".format(lr))
+#         if momentum < 0.0 or momentum >= 1.0:
+#             raise ValueError("Invalid momentum value: {}".format(momentum))
+#         if weight_decay < 0.0:
+#             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
+#         if logging_interval <= 0:
+#             raise ValueError(
+#                 "Invalid logging_interval value: {}".format(logging_interval)
+#             )
+#         if non_monotonic_interval <= 0:
+#             raise ValueError(
+#                 "Invalid non_monotonic_interval value: {}".format(
+#                     non_monotonic_interval
+#                 )
+#             )
 
-        defaults = dict(
-            lr=lr,
-            momentum=momentum,
-            weight_decay=weight_decay,
-            logging_interval=logging_interval,
-            non_monotonic_interval=non_monotonic_interval,
-        )
-        super(NonMonotonicAvSGD, self).__init__(params, defaults)
+#         defaults = dict(
+#             lr=lr,
+#             momentum=momentum,
+#             weight_decay=weight_decay,
+#             logging_interval=logging_interval,
+#             non_monotonic_interval=non_monotonic_interval,
+#         )
+#         super(NonMonotonicAvSGD, self).__init__(params, defaults)
 
-        self.state["k"] = 0
-        self.state["t"] = 0
-        self.state["T"] = 0
-        self.state["logs"] = []
-        self.state["averaging"] = False
-        self.state["num_averaged"] = 0
+#         self.state["k"] = 0
+#         self.state["t"] = 0
+#         self.state["T"] = 0
+#         self.state["logs"] = []
+#         self.state["averaging"] = False
+#         self.state["num_averaged"] = 0
 
-    def step(self, closure=None, current_loss=None):
-        """Performs a single optimization step.
+#     def step(self, closure=None, current_loss=None):
+#         """Performs a single optimization step.
 
-        Arguments:
-            closure (callable, optional): A closure that reevaluates the model and returns the loss.
-            current_loss (float, optional): The current validation loss to check for non-monotonic trigger.
-        """
-        loss = None
-        if closure is not None:
-            loss = closure()
+#         Arguments:
+#             closure (callable, optional): A closure that reevaluates the model and returns the loss.
+#             current_loss (float, optional): The current validation loss to check for non-monotonic trigger.
+#         """
+#         loss = None
+#         if closure is not None:
+#             loss = closure()
 
-        for group in self.param_groups:
-            weight_decay = group["weight_decay"]
-            momentum = group["momentum"]
+#         for group in self.param_groups:
+#             weight_decay = group["weight_decay"]
+#             momentum = group["momentum"]
 
-            for p in group["params"]:
-                if p.grad is None:
-                    continue
-                d_p = p.grad.data
-                if weight_decay != 0:
-                    # d_p.add_(weight_decay, p.data)
-                    d_p.add_(p.data, alpha=weight_decay)
-                if momentum != 0:
-                    param_state = self.state[p]
-                    if "momentum_buffer" not in param_state:
-                        buf = param_state["momentum_buffer"] = torch.clone(d_p).detach()
-                    else:
-                        buf = param_state["momentum_buffer"]
-                        buf.mul_(momentum).add_(d_p)
-                    d_p = buf
+#             for p in group["params"]:
+#                 if p.grad is None:
+#                     continue
+#                 d_p = p.grad.data
+#                 if weight_decay != 0:
+#                     # d_p.add_(weight_decay, p.data)
+#                     d_p.add_(p.data, alpha=weight_decay)
+#                 if momentum != 0:
+#                     param_state = self.state[p]
+#                     if "momentum_buffer" not in param_state:
+#                         buf = param_state["momentum_buffer"] = torch.clone(d_p).detach()
+#                     else:
+#                         buf = param_state["momentum_buffer"]
+#                         buf.mul_(momentum).add_(d_p)
+#                     d_p = buf
 
-                # Update parameters according to: θ_t = θ_{t-1} - η_t * g_t
-                # p.data.add_(-group["lr"], d_p)
-                p.data.add_(d_p, alpha=-group["lr"])
+#                 # Update parameters according to: θ_t = θ_{t-1} - η_t * g_t
+#                 # p.data.add_(-group["lr"], d_p)
+#                 p.data.add_(d_p, alpha=-group["lr"])
 
-        # Increment the step counter
-        self.state["k"] += 1
+#         # Increment the step counter
+#         self.state["k"] += 1
 
-        # Check if we should log the validation loss
-        if (
-            self.state["k"] % self.defaults["logging_interval"] == 0
-            and self.state["T"] == 0
-        ):
-            if current_loss is not None:
-                self.state["logs"].append(current_loss)
-                if len(self.state["logs"]) > self.defaults["non_monotonic_interval"]:
-                    min_past_loss = min(
-                        self.state["logs"][: -self.defaults["non_monotonic_interval"]]
-                    )
-                    if current_loss > min_past_loss:
-                        self.state["T"] = self.state["k"]
-                self.state["t"] += 1
+#         # Check if we should log the validation loss
+#         if (
+#             self.state["k"] % self.defaults["logging_interval"] == 0
+#             and self.state["T"] == 0
+#         ):
+#             if current_loss is not None:
+#                 self.state["logs"].append(current_loss)
+#                 if len(self.state["logs"]) > self.defaults["non_monotonic_interval"]:
+#                     min_past_loss = min(
+#                         self.state["logs"][: -self.defaults["non_monotonic_interval"]]
+#                     )
+#                     if current_loss > min_past_loss:
+#                         self.state["T"] = self.state["k"]
+#                 self.state["t"] += 1
 
-        # If averaging is triggered, update the running average of parameters
-        if self.state["T"] != 0:
-            self.state["averaging"] = True
-            for group in self.param_groups:
-                for p in group["params"]:
-                    if "average_params" not in self.state:
-                        self.state["average_params"] = {
-                            id(p): torch.clone(p.data).detach() for p in group["params"]
-                        }
-                    else:
-                        avg_p = self.state["average_params"][id(p)]
-                        avg_p.mul_(self.state["num_averaged"]).add_(p.data).div_(
-                            self.state["num_averaged"] + 1
-                        )
-                        self.state["average_params"][id(p)] = avg_p.clone()
-            self.state["num_averaged"] += 1
+#         # If averaging is triggered, update the running average of parameters
+#         if self.state["T"] != 0:
+#             self.state["averaging"] = True
+#             for group in self.param_groups:
+#                 for p in group["params"]:
+#                     if "average_params" not in self.state:
+#                         self.state["average_params"] = {
+#                             id(p): torch.clone(p.data).detach() for p in group["params"]
+#                         }
+#                     else:
+#                         avg_p = self.state["average_params"][id(p)]
+#                         avg_p.mul_(self.state["num_averaged"]).add_(p.data).div_(
+#                             self.state["num_averaged"] + 1
+#                         )
+#                         self.state["average_params"][id(p)] = avg_p.clone()
+#             self.state["num_averaged"] += 1
 
-        if self.state["averaging"]:
-            logging.info("TRIGGERED")
-            self.apply_averaging()
-        return loss
+#         if self.state["averaging"]:
+#             logging.info("TRIGGERED")
+#             self.apply_averaging()
+#         return loss
 
-    def apply_averaging(self):
-        """Applies the averaged parameters."""
-        if not self.state["averaging"]:
-            raise RuntimeError("Averaging has not been triggered yet.")
-        for group in self.param_groups:
-            for p in group["params"]:
-                if (
-                    "average_params" in self.state
-                    and id(p) in self.state["average_params"]
-                ):
-                    p.data.copy_(self.state["average_params"][id(p)])
+#     def apply_averaging(self):
+#         """Applies the averaged parameters."""
+#         if not self.state["averaging"]:
+#             raise RuntimeError("Averaging has not been triggered yet.")
+#         for group in self.param_groups:
+#             for p in group["params"]:
+#                 if (
+#                     "average_params" in self.state
+#                     and id(p) in self.state["average_params"]
+#                 ):
+#                     p.data.copy_(self.state["average_params"][id(p)])
 
 
 # class NonMonotonicAvSGD(Optimizer):
