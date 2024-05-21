@@ -2,6 +2,13 @@ import torch
 import torch.nn as nn
 import logging
 
+    self.variational_dropout = config["variational_dropout"]
+    self.mask = 0
+
+def variational_dropout(self, x):
+    mask = self.mask
+    mask = mask.expand_as(x)
+    return x * mask
 
 class LM_RNN(nn.Module):
     def __init__(self, config: dict):
@@ -58,13 +65,16 @@ class LM_LSTM(nn.Module):
             config["output_size"], config["emb_size"], padding_idx=config["pad_index"]
         )
         self.emb_dropout = nn.Dropout(config["emb_dropout"])
+        
         self.rnn = nn.LSTM(
             config["emb_size"],
             config["hid_size"],
             config["n_layers"],
             bidirectional=False,
         )
+        
         self.out_dropout = nn.Dropout(config["out_dropout"])
+        
         self.output = nn.Linear(config["hid_size"], config["output_size"])
 
         self.name = f"{self.__class__.__name__}_emb_{config['emb_size']}_hid_{config['hid_size']}_edr_{config['emb_dropout']}_odr_{config['out_dropout']}_lay_{config['n_layers']}"
@@ -90,6 +100,8 @@ class LM_LSTM_WS(nn.Module):
         out_dropout: int = 0,
         n_layers: int = 1,
         """
+
+        assert config['emb_size'] != config['hid_size']
         super().__init__()
 
         logging.debug("LM_LSTM_WS")
@@ -106,9 +118,8 @@ class LM_LSTM_WS(nn.Module):
         )
         self.out_dropout = nn.Dropout(config["out_dropout"])
         self.output = nn.Linear(config["hid_size"], config["output_size"])
-        self.softmax = nn.Softmax(-1)
 
-        self.softmax.weight = self.embedding.weight
+        self.output.weight = self.embedding.weight
 
         self.name = f"{self.__class__.__name__}_emb_{config['emb_size']}_hid_{config['hid_size']}_edr_{config['emb_dropout']}_odr_{config['out_dropout']}_lay_{config['n_layers']}"
 
@@ -117,8 +128,7 @@ class LM_LSTM_WS(nn.Module):
         emb = self.emb_dropout(emb)
         rnn, _ = self.rnn(emb)
         out = self.out_dropout(rnn)
-        out = self.output(out)
-        out = self.softmax(out).permute(0, 2, 1)
+        out = self.output(out).permute(0, 2, 1)
 
         return out
 
@@ -172,6 +182,7 @@ class LM_LSTM_VD(nn.Module):
         emb = self.embedding(input_sequence)
 
         emb_dropout = self.variational_dropout(emb)
+
         rnn, _ = self.rnn(emb_dropout)
 
         rnn_dropout = self.variational_dropout(rnn)

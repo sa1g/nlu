@@ -37,6 +37,7 @@ def init_weights(mat):
 
 
 def train_loop(data, optimizer, criterion, model: torch.nn.Module, clip=5):
+    logging.debug("Rolling a batch")
     model.train()
     loss_array = []
     number_of_tokens = []
@@ -52,6 +53,7 @@ def train_loop(data, optimizer, criterion, model: torch.nn.Module, clip=5):
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
         optimizer.step()
 
+    logging.debug("Batch rolling done")
     return sum(loss_array) / sum(number_of_tokens)
 
 
@@ -118,51 +120,40 @@ def get_loaders_lang(
 
 def get_model(
     config: dict,
-    # emb_size: int,
-    # hid_size: int,
-    # output_size: int,
-    # pad_index,
-    # emb_dropout: float,
-    # out_dropout: float,
-    # n_layers: int,
-    device: float = "cpu",
-    init_weights=False,
-    model_type: str = "LM_RNN",
+    device
 ) -> nn.Module:
-    if model_type == "LM_RNN":
+    if config["model_type"] == "LM_RNN":
         logging.debug("LM_RNN")
         model = LM_RNN(config).to(device)
-    elif model_type == "LM_LSTM":
+    elif config["model_type"] == "LM_LSTM":
         logging.debug("LM_LSTM")
         model = LM_LSTM(config).to(device)
-    elif model_type == "LM_LSTM_WS":
+    elif config["model_type"] == "LM_LSTM_WS":
         model = LM_LSTM_WS(config).to(device)
-    elif model_type == "LM_LSTM_VD":
-        model = LM_LSTM_VD(config)
+    elif config["model_type"] == "LM_LSTM_VD":
+        model = LM_LSTM_VD(config).to(device)
 
     if init_weights:
-        model.apply(init_weights)
+        model.apply(config["init_weights"])
 
     return model
 
 
-def get_optimizer(
-    model: nn.Module, optim_name: str = "SGD", lr: float = 0.0001, config: dict = {}
-):
-    if optim_name == "SGD":
-        return optim.SGD(model.parameters(), lr=lr)
-    elif optim_name == "AdamW":
+def get_optimizer(model: nn.Module, config: dict = {}):
+    if config["optim_name"] == "SGD":
+        return optim.SGD(model.parameters(), lr=config["lr"])
+    elif config["optim_name"] == "AdamW":
         return optim.AdamW(
             model.parameters(),
-            lr=lr,
+            lr=config["lr"],
             betas=config["betas"],
             eps=config["eps"],
             weight_decay=config["weight_decay"],
         )
-    elif optim_name == "NonMonotonicAvSGD":
+    elif config["optim_name"] == "NonMonotonicAvSGD":
         return NonMonotonicAvSGD(
             model.parameters(),
-            lr=lr,
+            lr=config["lr"],
             momentum=config["momentum"],
             weight_decay=config["weight_decay"],
             logging_interval=config["logging_interval"],
@@ -172,7 +163,7 @@ def get_optimizer(
 
 def train(
     model: nn.Module,
-    optimizer,
+    optimizer_config: dict,
     lang: Lang,
     writer,
     n_epochs,
@@ -190,6 +181,9 @@ def train(
     criterion_eval = torch.nn.CrossEntropyLoss(
         ignore_index=lang.word2id["<pad>"], reduction="sum"
     )
+    
+    optimizer = get_optimizer(model=model, config=optimizer_config)
+    logging.debug(f"Got Optimizer: {optimizer.__class__.__name__}")
 
     losses_train = []
     losses_dev = []
@@ -200,9 +194,9 @@ def train(
     logging.debug("Training")
     pbar = tqdm(range(1, n_epochs))
 
+    # Training loop :)
     for epoch in pbar:
         loss = train_loop(train_loader, optimizer, criterion_train, model, clip)
-
         if epoch % 1 == 0:
             sampled_epochs.append(epoch)
 
@@ -225,6 +219,7 @@ def train(
 
             if patience <= 0:
                 break
+        
     logging.debug("Done")
 
     best_model.to(device)
@@ -384,10 +379,10 @@ class NonMonotonicAvSGD(Optimizer):
 #             raise ValueError("Invalid logging_interval value: {}".format(logging_interval))
 #         if non_monotonic_interval <= 0:
 #             raise ValueError("Invalid non_monotonic_interval value: {}".format(non_monotonic_interval))
-        
+
 #         defaults = dict(lr=lr, lambd=lambd, alpha=alpha, t0=t0, weight_decay=weight_decay, logging_interval=logging_interval, non_monotonic_interval=non_monotonic_interval)
 #         super(NonMonotonicAvSGD, self).__init__(params, defaults)
-        
+
 #         self.state['k'] = 0
 #         self.state['t'] = 0
 #         self.state['T'] = 0
@@ -424,7 +419,7 @@ class NonMonotonicAvSGD(Optimizer):
 
 #                 mu = param_state['mu']
 #                 eta = param_state['eta']
-                
+
 #                 p.data.add_(-eta, d_p)
 #                 mu.add_(-eta * (p.data - mu))
 
@@ -461,5 +456,3 @@ class NonMonotonicAvSGD(Optimizer):
 #             for p in group['params']:
 #                 if 'average_params' in self.state and id(p) in self.state['average_params']:
 #                     p.data.copy_(self.state['average_params'][id(p)])
-
-
