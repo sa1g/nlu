@@ -56,6 +56,7 @@ def main(train_config: dict, model_config: dict, optimizer_config: dict):
         dev_loader=dev_loader,
         test_loader=test_loader,
         device=DEVICE,
+        patience=config["patience"]
     )
 
 
@@ -74,7 +75,7 @@ if __name__ == "__main__":
     for key, config in config.items():
         logging.info(" !! Running %s !! ", key)
         assert config.get("model_type", "LM_RNN") in ["LM_RNN", "LM_LSTM"]
-        assert config.get("optim_name", "SGD") in ["SGD", "AdamW", "nmASGD"]
+        assert config.get("optim_name", "SGD") in ["SGD", "AdamW", "NTAvSGD"]
 
         train_config = {
             "dataset_path": config.get("dataset_path", "../dataset"),
@@ -83,6 +84,7 @@ if __name__ == "__main__":
             "test_batch_size": config.get("test_batch_size", 128),
             "n_epochs": config.get("n_epochs", 1),
             "clip": config.get("clip", 5),
+            "patience": config.get("patience", 5)
         }
 
         model_config = {

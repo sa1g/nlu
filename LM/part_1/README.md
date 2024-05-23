@@ -10,7 +10,7 @@ These are two links to the state-of-the-art papers which use vanilla RNN [paper1
 1. Replace RNN with a Long-Short Term Memory (LSTM) network --> [link](https://pytorch.org/docs/stable/generated/torch.nn.LSTM.html)
 2. Add two dropout layers: --> [link](https://pytorch.org/docs/stable/generated/torch.nn.Dropout.html)
     - one after the embedding layer, 
-    - one before theV last linear layer
+    - one before the last linear layer
 3. Replace SGD with AdamW --> [link](https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html)
 
 

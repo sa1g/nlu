@@ -1,18 +1,17 @@
 {
-    "experiment3": {
-        "model_type": "LM_LSTM",
+    "baseline": {
+        "model_type": "LM_RNN",
         "dataset_path": "../dataset",
-        "train_batch_size": 32,
-        "dev_batch_size": 32,
-        "test_batch_size": 32,
+        "train_batch_size": 1024,
+        "dev_batch_size": 1024,
+        "test_batch_size": 1024,
         "emb_size": 300,
-        "hid_size": 300,
+        "hid_size": 200,
         "n_layers": 1,
-        "lr": 1e-2,
+        "lr": 1,
         "weight_decay": 0,
-        "n_epochs": 40,
+        "n_epochs": 100,
         "clip": 5,
-        "optim_name": "nmASGD",
-        "patience": -1
+        "optim_name": "SGD"
     }
 }
