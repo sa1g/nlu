@@ -1,6 +1,8 @@
 # Add the class of your model only
 # Here is where you define the architecture of your model using pytorch
+import copy
 import logging
+import os
 from matplotlib import pyplot as plt
 import numpy as np
 import torch.nn as nn
@@ -11,6 +13,7 @@ import torch
 from torch.utils.data import DataLoader
 from sklearn.metrics import classification_report
 from torch import optim
+
 
 def init_weights(mat):
     for m in mat.modules():
@@ -108,6 +111,7 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
     )
     return results, report_intent, loss_array
 
+
 def train(
     model: nn.Module,
     optimizer_config: dict,
@@ -119,8 +123,12 @@ def train(
     dev_loader: DataLoader,
     test_loader: DataLoader,
     PAD_TOKEN,
+    w2id,
+    slot2id,
+    intent2id,
     device: str = "cpu",
     patience: int = 5,
+    runs: int = 5
 ):
     optimizer = optim.Adam(model.parameters(), lr=optimizer_config["lr"])
     criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
@@ -132,7 +140,9 @@ def train(
     losses_train = []
     losses_dev = []
     sampled_epochs = []
-    
+    run_patience = patience
+    best_model = None
+
     best_f1 = 0
     for x in tqdm(range(1, n_epochs)):
         loss = train_loop(
@@ -143,6 +153,7 @@ def train(
             model,
             clip=clip,
         )
+
         if x % 5 == 0:  # We check the performance every 5 epochs
             sampled_epochs.append(x)
             losses_train.append(np.asarray(loss).mean())
@@ -152,34 +163,37 @@ def train(
             losses_dev.append(np.asarray(loss_dev).mean())
 
             f1 = results_dev["total"]["f"]
+
             # For decreasing the patience you can also use the average between slot f1 and intent accuracy
             if f1 > best_f1:
                 best_f1 = f1
-                # Here you should save the model
-                patience = 3
+                best_model = copy.deepcopy(model).to("cpu")
+
+                run_patience = patience
             else:
-                patience -= 1
-            if patience <= 0:  # Early stopping with patience
+                run_patience -= 1
+            if run_patience <= 0:  # Early stopping with patience
                 break  # Not nice but it keeps the code clean
 
     results_test, intent_test, _ = eval_loop(
         test_loader, criterion_slots, criterion_intents, model, lang
     )
 
+    # Saving the model:
+    # PATH = os.path.join("bin", best_model.name, "pt")
+    PATH = f"bin/{best_model.name}.pt"
+    saving_object = {"epoch": x,
+                     "model": model.state_dict(),
+                     "optimizer": optimizer.state_dict(),
+                     "w2id": w2id,
+                     "slot2id": slot2id,
+                     "intent2id": intent2id}
+    torch.save(saving_object, PATH)
+
     # logging.info("Slot F1: %i", results_test["total"]["f"])
     # logging.info("Intent Accuracy: %i", intent_test["accuracy"])
     print("Slot F1: ", results_test["total"]["f"])
     print("Intent Accuracy:", intent_test["accuracy"])
-
-    # Saving the model:
-    # PATH = os.path.join("bin", model_name)
-    # saving_object = {"epoch": x,
-    #                  "model": model.state_dict(),
-    #                  "optimizer": optimizer.state_dict(),
-    #                  "w2id": w2id,
-    #                  "slot2id": slot2id,
-    #                  "intent2id": intent2id}
-    # torch.save(saving_object, PATH)
 
     plt.figure(num=3, figsize=(8, 5)).patch.set_facecolor("white")
     plt.title("Train and Dev Losses")
@@ -189,5 +203,3 @@ def train(
     plt.plot(sampled_epochs, losses_dev, label="Dev loss")
     plt.legend()
     plt.show()
-
-    

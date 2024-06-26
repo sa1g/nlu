@@ -225,4 +225,4 @@ def get_loaders_lang(dataset_path, train_batch_size, dev_batch_size, test_batch_
     dev_loader = DataLoader(dev_dataset, batch_size=dev_batch_size, collate_fn=collate_fn)
     test_loader = DataLoader(test_dataset, batch_size=test_batch_size, collate_fn=collate_fn)
 
-    return train_loader, dev_loader, test_loader, lang
+    return train_loader, dev_loader, test_loader, lang, w2id, slot2id, intent2id
