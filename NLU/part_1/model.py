@@ -27,6 +27,7 @@ class ModelIAS(nn.Module):
         )
         self.slot_out = nn.Linear(model_config["hid_size"], model_config["out_slot"])
         self.intent_out = nn.Linear(model_config["hid_size"], model_config["out_int"])
+        
         # Dropout layer How/Where do we apply it?
         self.dropout = nn.Dropout(0.1)
 
@@ -36,7 +37,6 @@ class ModelIAS(nn.Module):
         utt_emb = self.embedding(utterance)
 
         # pack_padded_sequence avoid computation over pad tokens reducing the computational cost
-
         packed_input = pack_padded_sequence(
             utt_emb, seq_lengths.cpu().numpy(), batch_first=True
         )
@@ -45,18 +45,21 @@ class ModelIAS(nn.Module):
 
         # Unpack the sequence
         utt_encoded, input_sizes = pad_packed_sequence(packed_output, batch_first=True)
+        
         # Get the last hidden state
         last_hidden = last_hidden[-1, :, :]
 
-        # Is this another possible way to get the last hiddent state? (Why?)
+        # Is this another possible way to get the last hidden state? (Why?)
         # utt_encoded.permute(1,0,2)[-1]
 
         # Compute slot logits
         slots = self.slot_out(utt_encoded)
+
         # Compute intent logits
         intent = self.intent_out(last_hidden)
 
         # Slot size: batch_size, seq_len, classes
         slots = slots.permute(0, 2, 1)  # We need this for computing the loss
+        
         # Slot size: batch_size, classes, seq_len
         return slots, intent

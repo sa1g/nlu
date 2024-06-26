@@ -113,6 +113,99 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
     return results, report_intent, loss_array
 
 
+# def train(
+#     model_config: dict,
+#     optimizer_config: dict,
+#     train_config: dict,
+#     train_loader: DataLoader,
+#     dev_loader: DataLoader,
+#     test_loader: DataLoader,
+#     lang,
+#     w2id,
+#     slot2id,
+#     intent2id,
+#     writer,
+#     PAD_TOKEN,
+#     name: str,
+#     device: str,
+# ):
+
+#     out_slot = len(lang.slot2id)
+#     out_int = len(lang.intent2id)
+#     vocab_len = len(lang.word2id)
+
+#     model_config["out_slot"] = out_slot
+#     model_config["out_int"] = out_int
+
+#     slot_f1s, intent_acc = [], []
+#     for run in tqdm(range(train_config["runs"]), desc="Runs"):
+#         # for run in tqdm(range(1), desc = "Runs"):
+
+#         # Get model
+#         model = ModelIAS(model_config, vocab_len, name, pad_index=PAD_TOKEN).to(device)
+#         model.apply(init_weights)
+
+#         optimizer = optim.Adam(model.parameters(), lr=optimizer_config["lr"])
+#         criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
+#         criterion_intents = (
+#             nn.CrossEntropyLoss()
+#         )  # Because we do not have the pad token
+
+#         run_patience = train_config["patience"]
+
+#         best_model = None
+#         best_f1 = 0
+
+#         losses_train = []
+#         losses_dev = []
+#         sampled_epochs = []
+
+#         for x in tqdm(
+#             range(train_config["n_epochs"]), desc=f"Run {run+1}", leave=False
+#         ):
+
+#             loss = train_loop(
+#                 train_loader,
+#                 optimizer,
+#                 criterion_slots,
+#                 criterion_intents,
+#                 model,
+#                 clip=train_config["clip"],
+#             )
+
+#             if x % 5 == 0:  # We check the performance every 5 epochs
+#                 sampled_epochs.append(x)
+#                 losses_train.append(np.asarray(loss).mean())
+#                 results_dev, intent_res, loss_dev = eval_loop(
+#                     dev_loader, criterion_slots, criterion_intents, model, lang
+#                 )
+#                 losses_dev.append(np.asarray(loss_dev).mean())
+
+#                 f1 = results_dev["total"]["f"]
+
+#                 # For decreasing the patience you can also use the average between slot f1 and intent accuracy
+#                 if f1 > best_f1:
+#                     best_f1 = f1
+#                     best_model = copy.deepcopy(model).to("cpu")
+
+#                     run_patience = train_config["patience"]
+#                 else:
+#                     run_patience -= 1
+#                 if run_patience <= 0:  # Early stopping with patience
+#                     break  # Not nice but it keeps the code clean
+
+#         results_test, intent_test, _ = eval_loop(
+#             test_loader, criterion_slots, criterion_intents, model, lang
+#         )
+
+#         intent_acc.append(intent_test["accuracy"])
+#         slot_f1s.append(results_test["total"]["f"])
+
+#     slot_f1s = np.asarray(slot_f1s)
+#     intent_acc = np.asarray(intent_acc)
+#     print("Slot F1", round(slot_f1s.mean(), 3), "+-", round(slot_f1s.std(), 3))
+#     print("Intent Acc", round(intent_acc.mean(), 3), "+-", round(slot_f1s.std(), 3))
+
 def train(
     model_config: dict,
     optimizer_config: dict,
@@ -138,8 +231,10 @@ def train(
     model_config["out_int"] = out_int
 
     slot_f1s, intent_acc = [], []
+    all_losses_train = []
+    all_losses_dev = []
+
     for run in tqdm(range(train_config["runs"]), desc="Runs"):
-        # for run in tqdm(range(1), desc = "Runs"):
 
         # Get model
         model = ModelIAS(model_config, vocab_len, name, pad_index=PAD_TOKEN).to(device)
@@ -147,9 +242,7 @@ def train(
 
         optimizer = optim.Adam(model.parameters(), lr=optimizer_config["lr"])
         criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
-        criterion_intents = (
-            nn.CrossEntropyLoss()
-        )  # Because we do not have the pad token
+        criterion_intents = nn.CrossEntropyLoss()
 
         run_patience = train_config["patience"]
 
@@ -183,7 +276,6 @@ def train(
 
                 f1 = results_dev["total"]["f"]
 
-                # For decreasing the patience you can also use the average between slot f1 and intent accuracy
                 if f1 > best_f1:
                     best_f1 = f1
                     best_model = copy.deepcopy(model).to("cpu")
@@ -192,7 +284,7 @@ def train(
                 else:
                     run_patience -= 1
                 if run_patience <= 0:  # Early stopping with patience
-                    break  # Not nice but it keeps the code clean
+                    break
 
         results_test, intent_test, _ = eval_loop(
             test_loader, criterion_slots, criterion_intents, model, lang
@@ -201,10 +293,31 @@ def train(
         intent_acc.append(intent_test["accuracy"])
         slot_f1s.append(results_test["total"]["f"])
 
+        all_losses_train.append(losses_train)
+        all_losses_dev.append(losses_dev)
+
     slot_f1s = np.asarray(slot_f1s)
     intent_acc = np.asarray(intent_acc)
+
+    avg_losses_train = np.mean(all_losses_train, axis=0)
+    std_losses_train = np.std(all_losses_train, axis=0)
+    avg_losses_dev = np.mean(all_losses_dev, axis=0)
+    std_losses_dev = np.std(all_losses_dev, axis=0)
+
+    for epoch, (avg_loss_train, std_loss_train, avg_loss_dev, std_loss_dev) in enumerate(zip(avg_losses_train, std_losses_train, avg_losses_dev, std_losses_dev)):
+        writer.add_scalar('Loss/Train_avg', avg_loss_train, epoch * 5)
+        writer.add_scalar('Loss/Train_std', std_loss_train, epoch * 5)
+        writer.add_scalar('Loss/Dev_avg', avg_loss_dev, epoch * 5)
+        writer.add_scalar('Loss/Dev_std', std_loss_dev, epoch * 5)
+
+    writer.add_scalar('Metrics/Slot_F1_avg', slot_f1s.mean())
+    writer.add_scalar('Metrics/Slot_F1_std', slot_f1s.std())
+    writer.add_scalar('Metrics/Intent_Acc_avg', intent_acc.mean())
+    writer.add_scalar('Metrics/Intent_Acc_std', intent_acc.std())
+
     print("Slot F1", round(slot_f1s.mean(), 3), "+-", round(slot_f1s.std(), 3))
-    print("Intent Acc", round(intent_acc.mean(), 3), "+-", round(slot_f1s.std(), 3))
+    print("Intent Acc", round(intent_acc.mean(), 3), "+-", round(intent_acc.std(), 3))
+
 
     # Saving the model:
     PATH = f"bin/{best_model.name}.pt"
