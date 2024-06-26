@@ -1,10 +1,11 @@
 {
+    
     "baseline": {
         "model_type": "LM_RNN",
         "dataset_path": "../dataset",
-        "train_batch_size": 128,
-        "dev_batch_size": 128,
-        "test_batch_size": 128,
+        "train_batch_size": 1024,
+        "dev_batch_size": 1024,
+        "test_batch_size": 1024,
         "emb_size": 300,
         "hid_size": 200,
         "n_layers": 1,

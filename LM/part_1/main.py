@@ -5,17 +5,13 @@ from functions import (
     train,
     get_loaders_lang,
 )
+import argparse
 from torch.utils.tensorboard import SummaryWriter
 import logging
 import json
 
-logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.DEBUG)
-
-
-import argparse
-
+logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.INFO)
 parser = argparse.ArgumentParser()
-
 parser.add_argument("-c", default="config.json", help="Config file json")
 
 
@@ -42,7 +38,9 @@ def main(train_config: dict, model_config: dict, optimizer_config: dict):
     logging.debug("Model done")
 
     # TENSORBOARD
-    writer: SummaryWriter = SummaryWriter(log_dir=f"log/{model.name}")
+    writer: SummaryWriter = SummaryWriter(
+        log_dir=f"log/{model.name}-{train_config['train_batch_size']}-{train_config['dev_batch_size']}"
+    )
 
     # TRAINING
     train(
@@ -56,7 +54,7 @@ def main(train_config: dict, model_config: dict, optimizer_config: dict):
         dev_loader=dev_loader,
         test_loader=test_loader,
         device=DEVICE,
-        patience=train_config["patience"]
+        patience=train_config["patience"],
     )
 
 
@@ -84,7 +82,7 @@ if __name__ == "__main__":
             "test_batch_size": config.get("test_batch_size", 128),
             "n_epochs": config.get("n_epochs", 1),
             "clip": config.get("clip", 5),
-            "patience": config.get("patience", 5)
+            "patience": config.get("patience", 5),
         }
 
         model_config = {
@@ -107,7 +105,7 @@ if __name__ == "__main__":
             "weight_decay": config.get("weight_decay", 0.01),
             "momentum": config.get("momentum", 0),
             "non_monotonic_interval": config.get("non_monotonic_interval", 5),
-            "logging_interval": config.get("train_batch_size", 128)
+            "logging_interval": config.get("train_batch_size", 128),
         }
 
         main(train_config, model_config, optimizer_config)
