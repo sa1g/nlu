@@ -182,9 +182,9 @@ def split_dev_set(tmp_train_raw, test_raw):
     return train_raw, dev_raw, test_raw
 
 
-def get_datasets(path_train, path_test):
-    tmp_train_raw = load_data(path_train)
-    test_raw = load_data(path_test)
+def get_loaders_lang(dataset_path, train_batch_size, dev_batch_size, test_batch_size):
+    tmp_train_raw = load_data(os.path.join(dataset_path, "train.json"))
+    test_raw = load_data(os.path.join(dataset_path, "test.json"))
 
     logging.debug("Train samples: %s", len(tmp_train_raw))
     logging.debug("Test samples: %s", len(test_raw))
@@ -220,9 +220,9 @@ def get_datasets(path_train, path_test):
 
     # Dataloader instantiations
     train_loader = DataLoader(
-        train_dataset, batch_size=128, collate_fn=collate_fn, shuffle=True
+        train_dataset, batch_size=train_batch_size, collate_fn=collate_fn, shuffle=True
     )
-    dev_loader = DataLoader(dev_dataset, batch_size=64, collate_fn=collate_fn)
-    test_loader = DataLoader(test_dataset, batch_size=64, collate_fn=collate_fn)
+    dev_loader = DataLoader(dev_dataset, batch_size=dev_batch_size, collate_fn=collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size=test_batch_size, collate_fn=collate_fn)
 
     return train_loader, dev_loader, test_loader, lang

@@ -19,6 +19,7 @@ class ModelIAS(nn.Module):
         # out_slot = number of slots (output size for slot filling)
         # out_int = number of intents (output size for intent class)
         # emb_size = word embedding size
+        self.name = __class__.__name__
 
         self.embedding = nn.Embedding(vocab_len, emb_size, padding_idx=pad_index)
 
