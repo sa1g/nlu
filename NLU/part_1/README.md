@@ -9,3 +9,11 @@ Modify the baseline architecture Model - - by:
 **Slot filling**: F1 score with conll
 
 ***Dataset to use: ATIS***
+
+# TODOs
+1. multiple runs to get avg and std
+2. tensorboard support
+3. bidirectionality
+4. dropout layer
+5. experiment config
+6. it would be cool, for fun, to add model quantization during inference :P
