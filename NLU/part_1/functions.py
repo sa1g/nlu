@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import torch.nn as nn
 from tqdm import tqdm
+from model import ModelIAS
 from utils import Lang
 from conll import evaluate
 import torch
@@ -100,10 +101,10 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
         results = evaluate(ref_slots, hyp_slots)
     except Exception as ex:
         # Sometimes the model predicts a class that is not in REF
-        print("Warning:", ex)
+        logging.warning("Warning: %s", ex)
         ref_s = set([x[1] for x in ref_slots])
         hyp_s = set([x[1] for x in hyp_slots])
-        print(hyp_s.difference(ref_s))
+        logging.warning(hyp_s.difference(ref_s))
         results = {"total": {"f": 0}}
 
     report_intent = classification_report(
@@ -113,87 +114,109 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
 
 
 def train(
-    model: nn.Module,
+    model_config: dict,
     optimizer_config: dict,
-    lang: Lang,
-    writer,
-    n_epochs,
-    clip: int,
+    train_config: dict,
     train_loader: DataLoader,
     dev_loader: DataLoader,
     test_loader: DataLoader,
-    PAD_TOKEN,
+    lang,
     w2id,
     slot2id,
     intent2id,
-    device: str = "cpu",
-    patience: int = 5,
-    runs: int = 5
+    writer,
+    PAD_TOKEN,
+    name: str,
+    device: str,
 ):
-    optimizer = optim.Adam(model.parameters(), lr=optimizer_config["lr"])
-    criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
-    criterion_intents = nn.CrossEntropyLoss()  # Because we do not have the pad token
 
-    # Simple Training loop
-    # TODO: put multiple runs to get avg and std
-    # TODO: add tensorboard support
-    losses_train = []
-    losses_dev = []
-    sampled_epochs = []
-    run_patience = patience
-    best_model = None
+    out_slot = len(lang.slot2id)
+    out_int = len(lang.intent2id)
+    vocab_len = len(lang.word2id)
 
-    best_f1 = 0
-    for x in tqdm(range(1, n_epochs)):
-        loss = train_loop(
-            train_loader,
-            optimizer,
-            criterion_slots,
-            criterion_intents,
-            model,
-            clip=clip,
+    model_config["out_slot"] = out_slot
+    model_config["out_int"] = out_int
+
+    slot_f1s, intent_acc = [], []
+    for run in tqdm(range(train_config["runs"]), desc="Runs"):
+        # for run in tqdm(range(1), desc = "Runs"):
+
+        # Get model
+        model = ModelIAS(model_config, vocab_len, name, pad_index=PAD_TOKEN).to(device)
+        model.apply(init_weights)
+
+        optimizer = optim.Adam(model.parameters(), lr=optimizer_config["lr"])
+        criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
+        criterion_intents = (
+            nn.CrossEntropyLoss()
+        )  # Because we do not have the pad token
+
+        run_patience = train_config["patience"]
+
+        best_model = None
+        best_f1 = 0
+
+        losses_train = []
+        losses_dev = []
+        sampled_epochs = []
+
+        for x in tqdm(
+            range(train_config["n_epochs"]), desc=f"Run {run+1}", leave=False
+        ):
+
+            loss = train_loop(
+                train_loader,
+                optimizer,
+                criterion_slots,
+                criterion_intents,
+                model,
+                clip=train_config["clip"],
+            )
+
+            if x % 5 == 0:  # We check the performance every 5 epochs
+                sampled_epochs.append(x)
+                losses_train.append(np.asarray(loss).mean())
+                results_dev, intent_res, loss_dev = eval_loop(
+                    dev_loader, criterion_slots, criterion_intents, model, lang
+                )
+                losses_dev.append(np.asarray(loss_dev).mean())
+
+                f1 = results_dev["total"]["f"]
+
+                # For decreasing the patience you can also use the average between slot f1 and intent accuracy
+                if f1 > best_f1:
+                    best_f1 = f1
+                    best_model = copy.deepcopy(model).to("cpu")
+
+                    run_patience = train_config["patience"]
+                else:
+                    run_patience -= 1
+                if run_patience <= 0:  # Early stopping with patience
+                    break  # Not nice but it keeps the code clean
+
+        results_test, intent_test, _ = eval_loop(
+            test_loader, criterion_slots, criterion_intents, model, lang
         )
 
-        if x % 5 == 0:  # We check the performance every 5 epochs
-            sampled_epochs.append(x)
-            losses_train.append(np.asarray(loss).mean())
-            results_dev, intent_res, loss_dev = eval_loop(
-                dev_loader, criterion_slots, criterion_intents, model, lang
-            )
-            losses_dev.append(np.asarray(loss_dev).mean())
+        intent_acc.append(intent_test["accuracy"])
+        slot_f1s.append(results_test["total"]["f"])
 
-            f1 = results_dev["total"]["f"]
-
-            # For decreasing the patience you can also use the average between slot f1 and intent accuracy
-            if f1 > best_f1:
-                best_f1 = f1
-                best_model = copy.deepcopy(model).to("cpu")
-
-                run_patience = patience
-            else:
-                run_patience -= 1
-            if run_patience <= 0:  # Early stopping with patience
-                break  # Not nice but it keeps the code clean
-
-    results_test, intent_test, _ = eval_loop(
-        test_loader, criterion_slots, criterion_intents, model, lang
-    )
+    slot_f1s = np.asarray(slot_f1s)
+    intent_acc = np.asarray(intent_acc)
+    print("Slot F1", round(slot_f1s.mean(), 3), "+-", round(slot_f1s.std(), 3))
+    print("Intent Acc", round(intent_acc.mean(), 3), "+-", round(slot_f1s.std(), 3))
 
     # Saving the model:
-    # PATH = os.path.join("bin", best_model.name, "pt")
     PATH = f"bin/{best_model.name}.pt"
-    saving_object = {"epoch": x,
-                     "model": model.state_dict(),
-                     "optimizer": optimizer.state_dict(),
-                     "w2id": w2id,
-                     "slot2id": slot2id,
-                     "intent2id": intent2id}
+    saving_object = {
+        "epoch": x,
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "w2id": w2id,
+        "slot2id": slot2id,
+        "intent2id": intent2id,
+    }
     torch.save(saving_object, PATH)
-
-    # logging.info("Slot F1: %i", results_test["total"]["f"])
-    # logging.info("Intent Accuracy: %i", intent_test["accuracy"])
-    print("Slot F1: ", results_test["total"]["f"])
-    print("Intent Accuracy:", intent_test["accuracy"])
 
     plt.figure(num=3, figsize=(8, 5)).patch.set_facecolor("white")
     plt.title("Train and Dev Losses")

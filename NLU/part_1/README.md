@@ -12,7 +12,7 @@ Modify the baseline architecture Model - - by:
 
 # TODOs
 1. ~~model saving~~
-1. multiple runs to get avg and std
+1. ~~multiple runs to get avg and std~~
 2. tensorboard support
 3. bidirectionality
 4. dropout layer

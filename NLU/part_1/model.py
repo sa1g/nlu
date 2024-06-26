@@ -12,22 +12,21 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 class ModelIAS(nn.Module):
 
     def __init__(
-        self, hid_size, out_slot, out_int, emb_size, vocab_len, n_layer=1, pad_index=0
+        self, model_config, vocab_len, name, pad_index=0
     ):
-        super(ModelIAS, self).__init__()
+        super().__init__()
         # hid_size = Hidden size
         # out_slot = number of slots (output size for slot filling)
         # out_int = number of intents (output size for intent class)
         # emb_size = word embedding size
-        self.name = __class__.__name__
-
-        self.embedding = nn.Embedding(vocab_len, emb_size, padding_idx=pad_index)
+        self.name = name
+        self.embedding = nn.Embedding(vocab_len, model_config["emb_size"], padding_idx=pad_index)
 
         self.utt_encoder = nn.LSTM(
-            emb_size, hid_size, n_layer, bidirectional=False, batch_first=True
+            model_config["emb_size"], model_config["hid_size"], model_config["n_layers"], bidirectional=False, batch_first=True
         )
-        self.slot_out = nn.Linear(hid_size, out_slot)
-        self.intent_out = nn.Linear(hid_size, out_int)
+        self.slot_out = nn.Linear(model_config["hid_size"], model_config["out_slot"])
+        self.intent_out = nn.Linear(model_config["hid_size"], model_config["out_int"])
         # Dropout layer How/Where do we apply it?
         self.dropout = nn.Dropout(0.1)
 

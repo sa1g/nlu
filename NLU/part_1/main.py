@@ -13,7 +13,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-c", default="config.json", help="Config file json")
-logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.INFO)
+logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.ERROR)
 # logging.basicConfig(
 #     format="%(levelname)s:%(filename)s:%(funcName)s:%(lineno)d:%(message)s",
 #     level=logging.DEBUG
@@ -33,44 +33,29 @@ def main(
         )
     )
 
-    # Setup model config
-    ## model_config is not fully used at the moment
-    hid_size = 200
-    emb_size = 300
-
-    out_slot = len(lang.slot2id)
-    out_int = len(lang.intent2id)
-    vocab_len = len(lang.word2id)
-
-    # Get model
-    model = ModelIAS(
-        hid_size, out_slot, out_int, emb_size, vocab_len, pad_index=PAD_TOKEN
-    ).to(device)
-    model.apply(init_weights)
+    name = f"ModelIAS_emb_{model_config['emb_size']}_hid_{model_config['hid_size']}_edo_{model_config['emb_dropout']}_odo_{model_config['out_dropout']}_lay_{model_config['n_layers']}_bid_{model_config['bidirectional']}_{train_config['train_batch_size']}_{train_config['dev_batch_size']}_{train_config['test_batch_size']}"
 
     # TENSORBOARD
     writer: SummaryWriter = SummaryWriter(
-        log_dir=f"log/{model.name}-{train_config['train_batch_size']}-{train_config['dev_batch_size']}"
+        log_dir=f"log/{name}"
     )
 
     # Training
     train(
-        model=model,
+        model_config=model_config,
         optimizer_config=optimizer_config,
-        lang=lang,
-        writer=writer,
-        n_epochs=train_config["n_epochs"],
-        clip=train_config["clip"],
+        train_config=train_config,
         train_loader=train_loader,
         dev_loader=dev_loader,
         test_loader=test_loader,
-        PAD_TOKEN=PAD_TOKEN,
-        device=device,
-        patience=train_config["patience"],
+        lang=lang,
         w2id=w2id,
         slot2id=slot2id,
         intent2id=intent2id,
-        runs=train_config["runs"],
+        writer=writer,
+        PAD_TOKEN=PAD_TOKEN,
+        name=name,
+        device=device
     )
 
 
@@ -83,7 +68,7 @@ def load_config(config_file):
 if __name__ == "__main__":
     # Global variables
     device = "cuda:0"
-    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"  # Used to report errors on CUDA side
+    # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"  # Used to report errors on CUDA side
     PAD_TOKEN = 0
 
     args = parser.parse_args()
@@ -94,6 +79,7 @@ if __name__ == "__main__":
         # add assert here if needed
 
         train_config = {
+            "name": key,
             "dataset_path": config.get(
                 "dataset_path", os.path.join("..", "dataset", "ATIS")
             ),
@@ -226,44 +212,44 @@ if __name__ == "__main__":
     # n_epochs = 200
     # runs = 5
 
-    slot_f1s, intent_acc = [], []
-    for x in tqdm(range(0, runs)):
-        model = ModelIAS(hid_size, out_slot, out_int, emb_size,
-                        vocab_len, pad_index=PAD_TOKEN).to(device)
-        model.apply(init_weights)
+    # slot_f1s, intent_acc = [], []
+    # for x in tqdm(range(0, runs)):
+    #     model = ModelIAS(hid_size, out_slot, out_int, emb_size,
+    #                     vocab_len, pad_index=PAD_TOKEN).to(device)
+    #     model.apply(init_weights)
 
-        optimizer = optim.Adam(model.parameters(), lr=lr)
-        criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
-        criterion_intents = nn.CrossEntropyLoss()
+    #     optimizer = optim.Adam(model.parameters(), lr=lr)
+    #     criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
+    #     criterion_intents = nn.CrossEntropyLoss()
 
-        patience = 3
-        losses_train = []
-        losses_dev = []
-        sampled_epochs = []
-        best_f1 = 0
-        for x in range(1,n_epochs):
-            loss = train_loop(train_loader, optimizer, criterion_slots,
-                            criterion_intents, model)
-            if x % 5 == 0:
-                sampled_epochs.append(x)
-                losses_train.append(np.asarray(loss).mean())
-                results_dev, intent_res, loss_dev = eval_loop(dev_loader, criterion_slots,
-                                                            criterion_intents, model, lang)
-                losses_dev.append(np.asarray(loss_dev).mean())
-                f1 = results_dev['total']['f']
+    #     patience = 3
+    #     losses_train = []
+    #     losses_dev = []
+    #     sampled_epochs = []
+    #     best_f1 = 0
+    #     for x in range(1,n_epochs):
+    #         loss = train_loop(train_loader, optimizer, criterion_slots,
+    #                         criterion_intents, model)
+    #         if x % 5 == 0:
+    #             sampled_epochs.append(x)
+    #             losses_train.append(np.asarray(loss).mean())
+    #             results_dev, intent_res, loss_dev = eval_loop(dev_loader, criterion_slots,
+    #                                                         criterion_intents, model, lang)
+    #             losses_dev.append(np.asarray(loss_dev).mean())
+    #             f1 = results_dev['total']['f']
 
-                if f1 > best_f1:
-                    best_f1 = f1
-                else:
-                    patience -= 1
-                if patience <= 0: # Early stopping with patient
-                    break # Not nice but it keeps the code clean
+    #             if f1 > best_f1:
+    #                 best_f1 = f1
+    #             else:
+    #                 patience -= 1
+    #             if patience <= 0: # Early stopping with patient
+    #                 break # Not nice but it keeps the code clean
 
-        results_test, intent_test, _ = eval_loop(test_loader, criterion_slots,
-                                                criterion_intents, model, lang)
-        intent_acc.append(intent_test['accuracy'])
-        slot_f1s.append(results_test['total']['f'])
-    slot_f1s = np.asarray(slot_f1s)
-    intent_acc = np.asarray(intent_acc)
-    print('Slot F1', round(slot_f1s.mean(),3), '+-', round(slot_f1s.std(),3))
-    print('Intent Acc', round(intent_acc.mean(), 3), '+-', round(slot_f1s.std(), 3))
+    #     results_test, intent_test, _ = eval_loop(test_loader, criterion_slots,
+    #                                             criterion_intents, model, lang)
+    #     intent_acc.append(intent_test['accuracy'])
+    #     slot_f1s.append(results_test['total']['f'])
+    # slot_f1s = np.asarray(slot_f1s)
+    # intent_acc = np.asarray(intent_acc)
+    # print('Slot F1', round(slot_f1s.mean(),3), '+-', round(slot_f1s.std(),3))
+    # print('Intent Acc', round(intent_acc.mean(), 3), '+-', round(slot_f1s.std(), 3))
