@@ -206,6 +206,147 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
 #     print("Slot F1", round(slot_f1s.mean(), 3), "+-", round(slot_f1s.std(), 3))
 #     print("Intent Acc", round(intent_acc.mean(), 3), "+-", round(slot_f1s.std(), 3))
 
+# def train(
+#     model_config: dict,
+#     optimizer_config: dict,
+#     train_config: dict,
+#     train_loader: DataLoader,
+#     dev_loader: DataLoader,
+#     test_loader: DataLoader,
+#     lang,
+#     w2id,
+#     slot2id,
+#     intent2id,
+#     writer,
+#     PAD_TOKEN,
+#     name: str,
+#     device: str,
+# ):
+
+#     out_slot = len(lang.slot2id)
+#     out_int = len(lang.intent2id)
+#     vocab_len = len(lang.word2id)
+
+#     model_config["out_slot"] = out_slot
+#     model_config["out_int"] = out_int
+
+#     slot_f1s, intent_acc = [], []
+#     all_losses_train = []
+#     all_losses_dev = []
+
+#     for run in tqdm(range(train_config["runs"]), desc="Runs"):
+
+#         # Get model
+#         model = ModelIAS(model_config, vocab_len, name, pad_index=PAD_TOKEN).to(device)
+#         model.apply(init_weights)
+
+#         optimizer = optim.Adam(model.parameters(), lr=optimizer_config["lr"])
+#         criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
+#         criterion_intents = nn.CrossEntropyLoss()
+
+#         run_patience = train_config["patience"]
+
+#         best_model = None
+#         best_f1 = 0
+
+#         losses_train = []
+#         losses_dev = []
+#         sampled_epochs = []
+
+#         for x in tqdm(
+#             range(train_config["n_epochs"]), desc=f"Run {run+1}", leave=False
+#         ):
+
+#             loss = train_loop(
+#                 train_loader,
+#                 optimizer,
+#                 criterion_slots,
+#                 criterion_intents,
+#                 model,
+#                 clip=train_config["clip"],
+#             )
+
+#             if x % 5 == 0:  # We check the performance every 5 epochs
+#                 sampled_epochs.append(x)
+#                 losses_train.append(np.asarray(loss).mean())
+#                 results_dev, intent_res, loss_dev = eval_loop(
+#                     dev_loader, criterion_slots, criterion_intents, model, lang
+#                 )
+#                 losses_dev.append(np.asarray(loss_dev).mean())
+
+#                 f1 = results_dev["total"]["f"]
+
+#                 if f1 > best_f1:
+#                     best_f1 = f1
+#                     best_model = copy.deepcopy(model).to("cpu")
+
+#                     run_patience = train_config["patience"]
+#                 else:
+#                     run_patience -= 1
+#                 if run_patience <= 0:  # Early stopping with patience
+#                     break
+
+#         results_test, intent_test, _ = eval_loop(
+#             test_loader, criterion_slots, criterion_intents, model, lang
+#         )
+
+#         intent_acc.append(intent_test["accuracy"])
+#         slot_f1s.append(results_test["total"]["f"])
+
+#         all_losses_train.append(losses_train)
+#         all_losses_dev.append(losses_dev)
+
+#     all_losses_train = np.asarray(all_losses_train)
+#     all_losses_dev = np.asarray(all_losses_dev)
+
+#     slot_f1s = np.asarray(slot_f1s)
+#     intent_acc = np.asarray(intent_acc)
+
+#     avg_losses_train = np.mean(all_losses_train, axis=0)
+#     std_losses_train = np.std(all_losses_train, axis=0)
+#     avg_losses_dev = np.mean(all_losses_dev, axis=0)
+#     std_losses_dev = np.std(all_losses_dev, axis=0)
+
+#     for epoch, (avg_loss_train, std_loss_train, avg_loss_dev, std_loss_dev) in enumerate(zip(avg_losses_train, std_losses_train, avg_losses_dev, std_losses_dev)):
+#         writer.add_scalar('Loss/Train_avg', avg_loss_train, epoch * 5)
+#         writer.add_scalar('Loss/Train_std', std_loss_train, epoch * 5)
+#         writer.add_scalar('Loss/Dev_avg', avg_loss_dev, epoch * 5)
+#         writer.add_scalar('Loss/Dev_std', std_loss_dev, epoch * 5)
+
+#     writer.add_scalar('Metrics/Slot_F1_avg', slot_f1s.mean())
+#     writer.add_scalar('Metrics/Slot_F1_std', slot_f1s.std())
+#     writer.add_scalar('Metrics/Intent_Acc_avg', intent_acc.mean())
+#     writer.add_scalar('Metrics/Intent_Acc_std', intent_acc.std())
+
+#     print("Slot F1", round(slot_f1s.mean(), 3), "+-", round(slot_f1s.std(), 3))
+#     print("Intent Acc", round(intent_acc.mean(), 3), "+-", round(intent_acc.std(), 3))
+
+
+#     # Saving the model:
+#     PATH = f"bin/{best_model.name}.pt"
+#     saving_object = {
+#         "epoch": x,
+#         "model": model.state_dict(),
+#         "optimizer": optimizer.state_dict(),
+#         "w2id": w2id,
+#         "slot2id": slot2id,
+#         "intent2id": intent2id,
+#     }
+#     torch.save(saving_object, PATH)
+
+#     plt.figure(num=3, figsize=(8, 5)).patch.set_facecolor("white")
+#     plt.title("Train and Dev Losses")
+#     plt.ylabel("Loss")
+#     plt.xlabel("Epochs")
+#     plt.plot(sampled_epochs, losses_train, label="Train loss")
+#     plt.plot(sampled_epochs, losses_dev, label="Dev loss")
+#     plt.legend()
+#     plt.show()
+
+def pad_list_of_lists(lists, pad_value=np.nan):
+    max_length = max(len(lst) for lst in lists)
+    return [lst + [pad_value] * (max_length - len(lst)) for lst in lists]
+
 def train(
     model_config: dict,
     optimizer_config: dict,
@@ -222,7 +363,6 @@ def train(
     name: str,
     device: str,
 ):
-
     out_slot = len(lang.slot2id)
     out_int = len(lang.intent2id)
     vocab_len = len(lang.word2id)
@@ -296,13 +436,21 @@ def train(
         all_losses_train.append(losses_train)
         all_losses_dev.append(losses_dev)
 
-    slot_f1s = np.asarray(slot_f1s)
-    intent_acc = np.asarray(intent_acc)
+    # Pad lists to the same length
+    all_losses_train = pad_list_of_lists(all_losses_train)
+    all_losses_dev = pad_list_of_lists(all_losses_dev)
 
-    avg_losses_train = np.mean(all_losses_train, axis=0)
-    std_losses_train = np.std(all_losses_train, axis=0)
-    avg_losses_dev = np.mean(all_losses_dev, axis=0)
-    std_losses_dev = np.std(all_losses_dev, axis=0)
+    # Convert to numpy arrays and compute statistics, ignoring nan values
+    all_losses_train = np.array(all_losses_train)
+    all_losses_dev = np.array(all_losses_dev)
+
+    avg_losses_train = np.nanmean(all_losses_train, axis=0)
+    std_losses_train = np.nanstd(all_losses_train, axis=0)
+    avg_losses_dev = np.nanmean(all_losses_dev, axis=0)
+    std_losses_dev = np.nanstd(all_losses_dev, axis=0)
+
+    slot_f1s = np.array(slot_f1s)
+    intent_acc = np.array(intent_acc)
 
     for epoch, (avg_loss_train, std_loss_train, avg_loss_dev, std_loss_dev) in enumerate(zip(avg_losses_train, std_losses_train, avg_losses_dev, std_losses_dev)):
         writer.add_scalar('Loss/Train_avg', avg_loss_train, epoch * 5)
@@ -317,7 +465,6 @@ def train(
 
     print("Slot F1", round(slot_f1s.mean(), 3), "+-", round(slot_f1s.std(), 3))
     print("Intent Acc", round(intent_acc.mean(), 3), "+-", round(intent_acc.std(), 3))
-
 
     # Saving the model:
     PATH = f"bin/{best_model.name}.pt"
@@ -339,3 +486,4 @@ def train(
     plt.plot(sampled_epochs, losses_dev, label="Dev loss")
     plt.legend()
     plt.show()
+

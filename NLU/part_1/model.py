@@ -17,29 +17,35 @@ class ModelIAS(nn.Module):
         # out_slot = number of slots (output size for slot filling)
         # out_int = number of intents (output size for intent class)
         # emb_size = word embedding size
+        self.config = model_config
         self.name = name
         self.embedding = nn.Embedding(
             vocab_len, model_config["emb_size"], padding_idx=pad_index
         )
-        
+
         # dropout: float = 0,
         self.utt_encoder = nn.LSTM(
             input_size=model_config["emb_size"],
             hidden_size=model_config["hid_size"],
             num_layers=model_config["n_layers"],
             bidirectional=model_config["bidirectional"],
+            dropout=model_config["in_dropout"],
             batch_first=True,
         )
         self.slot_out = nn.Linear(model_config["hid_size"], model_config["out_slot"])
         self.intent_out = nn.Linear(model_config["hid_size"], model_config["out_int"])
 
         # Dropout layer How/Where do we apply it?
-        self.dropout = nn.Dropout(0.1)
+        self.dropout = nn.Dropout(self.config['emb_dropout'])
 
     def forward(self, utterance, seq_lengths):
         # utterance.size() = batch_size X seq_len
         # utt_emb.size() = batch_size X seq_len X emb_size
         utt_emb = self.embedding(utterance)
+
+        if self.config['emb_dropout'] > 0:
+            utt_emb = self.dropout(utt_emb)
+
 
         # pack_padded_sequence avoid computation over pad tokens reducing the computational cost
         packed_input = pack_padded_sequence(

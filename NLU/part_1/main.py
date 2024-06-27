@@ -33,7 +33,7 @@ def main(
         )
     )
 
-    name = f"ModelIAS_emb_{model_config['emb_size']}_hid_{model_config['hid_size']}_edo_{model_config['emb_dropout']}_odo_{model_config['out_dropout']}_lay_{model_config['n_layers']}_bid_{model_config['bidirectional']}_{train_config['train_batch_size']}_{train_config['dev_batch_size']}_{train_config['test_batch_size']}"
+    name = f"ModelIAS_emb_{model_config['emb_size']}_hid_{model_config['hid_size']}_edo_{model_config['emb_dropout']}_odo_{model_config['out_dropout']}_ido_{model_config['in_dropout']}_lay_{model_config['n_layers']}_bid_{model_config['bidirectional']}_{train_config['train_batch_size']}_{train_config['dev_batch_size']}_{train_config['test_batch_size']}"
 
     # TENSORBOARD
     writer: SummaryWriter = SummaryWriter(
@@ -97,6 +97,7 @@ if __name__ == "__main__":
             "hid_size": config.get("hid_size", 300),
             "emb_dropout": config.get("emb_dropout", 0),
             "out_dropout": config.get("out_dropout", 0),
+            "in_dropout": config.get("in_dropout", 0),
             "n_layers": config.get("n_layers", 1),
             "bidirectional": config.get("bidirectional", False),
         }

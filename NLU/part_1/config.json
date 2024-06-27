@@ -10,6 +10,9 @@
         "clip": 5,
         "patience":3,
         "lr": 0.0001,
-        "runs":2
+        "runs":2,
+        "emb_dropout":0.3,
+        "n_layers": 1,
+        "bidirectional": false
     }
 }
