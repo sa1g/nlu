@@ -11,7 +11,7 @@
         "patience":3,
         "lr": 0.0001,
         "runs":2,
-        "emb_dropout":0.3,
+        "emb_dropout":0,
         "n_layers": 1,
         "bidirectional": false
     }

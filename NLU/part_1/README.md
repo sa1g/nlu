@@ -16,7 +16,7 @@ Modify the baseline architecture Model by:
 2. ~~tensorboard support~~
 3. ~~bidirectionality~~
     - In a unidirectional LSTM, the forward pass captures information from past to future. By adding bidirectionality, the backward pass captures information from future to past. This allows the model to understand the context better since it has information from both preceding and succeeding words or time steps. Consequently, we can expect better performance in terms of accuracy for intent classification and F1 score for slot filling. Additionally, the model's understanding should be more balanced and less sensitive to the specific context and expression of the sentence.
-4. dropout layer
+4. ~~dropout layer~~
 5. experiment config
 6. it would be cool, for fun, to add model quantization during inference :P
 

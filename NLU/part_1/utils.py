@@ -191,11 +191,47 @@ def get_loaders_lang(dataset_path, train_batch_size, dev_batch_size, test_batch_
 
     train_raw, dev_raw, test_raw = split_dev_set(tmp_train_raw, test_raw)
 
-    w2id = {"pad": PAD_TOKEN}  # Pad tokens is 0 so the index count should start from 1
-    slot2id = {
-        "pad": PAD_TOKEN
-    }  # Pad tokens is 0 so the index count should start from 1
+    # w2id = {"pad": PAD_TOKEN}  # Pad tokens is 0 so the index count should start from 1
+    # slot2id = {
+    #     "pad": PAD_TOKEN
+    # }  # Pad tokens is 0 so the index count should start from 1
+    # intent2id = {}
+
+    # logging.debug(
+    #     "# Vocabulary size: %i", len(w2id) - 2
+    # )  # we remove pad and unk from the count
+    # logging.debug("# Slots: %i", len(slot2id) - 1)
+    # logging.debug("# Intent: %i", len(intent2id))
+
+
+    w2id = {'pad':PAD_TOKEN, 'unk': 1}
+    slot2id = {'pad':PAD_TOKEN}
     intent2id = {}
+    # Map the words only from the train set
+    # Map slot and intent labels of train, dev and test set. 'unk' is not needed.
+    for example in train_raw:
+        for w in example['utterance'].split():
+            if w not in w2id:
+                w2id[w] = len(w2id)   
+        for slot in example['slots'].split():
+            if slot not in slot2id:
+                slot2id[slot] = len(slot2id)
+        if example['intent'] not in intent2id:
+            intent2id[example['intent']] = len(intent2id)
+            
+    for example in dev_raw:
+        for slot in example['slots'].split():
+            if slot not in slot2id:
+                slot2id[slot] = len(slot2id)
+        if example['intent'] not in intent2id:
+            intent2id[example['intent']] = len(intent2id)
+            
+    for example in test_raw:
+        for slot in example['slots'].split():
+            if slot not in slot2id:
+                slot2id[slot] = len(slot2id)
+        if example['intent'] not in intent2id:
+            intent2id[example['intent']] = len(intent2id)
 
     logging.debug(
         "# Vocabulary size: %i", len(w2id) - 2
