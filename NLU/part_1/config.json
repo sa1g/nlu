@@ -3,7 +3,7 @@
         "emb_size": 300,
         "hid_size": 200,
         "dataset_path": "../dataset/ATIS",
-        "train_batch_size": 128,
+        "train_batch_size": 256,
         "dev_batch_size": 64,
         "test_batch_size": 64,
         "n_epochs": 200,
@@ -13,6 +13,6 @@
         "runs":2,
         "emb_dropout":0,
         "n_layers": 1,
-        "bidirectional": false
+        "bidirectional": true
     }
 }

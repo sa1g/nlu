@@ -11,8 +11,9 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from transformers import BertModel, BertConfig
 
 class ModelBert(nn.Module):
-    def __init__(self, bert_model_name, out_slot, out_int, dropout_rate=0.1):
+    def __init__(self, bert_model_name, out_slot, out_int, name, dropout_rate=0.1):
         super().__init__()
+        self.name = name
         self.bert = BertModel.from_pretrained(bert_model_name)
         hidden_size = self.bert.config.hidden_size
 

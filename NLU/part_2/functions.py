@@ -36,7 +36,9 @@ def init_weights(mat):
 
 
 def train_loop(
-    data, optimizer, criterion_slots, criterion_intents, model, scaler, clip=5
+    # data, optimizer, criterion_slots, criterion_intents, model, scaler, clip=5
+    data, optimizer, criterion_slots, criterion_intents, model, clip=5
+
 ):
     model.train()
     loss_array = []
@@ -44,24 +46,22 @@ def train_loop(
     for sample in data:
         optimizer.zero_grad()  # Zeroing the gradient
 
-        with torch.cuda.amp.autocast():
-            slots, intent = model(
-                sample["input_ids"], sample["attention_mask"], sample["token_type_ids"]
-            )
+        slots, intent = model(
+            sample["input_ids"], sample["attention_mask"], sample["token_type_ids"]
+        )
 
-            loss_intent = criterion_intents(intent, sample["intents"])
-            loss_slot = criterion_slots(slots, sample["slots"])
-            # In joint training we sum the losses.
-            loss = loss_intent + loss_slot
+        loss_intent = criterion_intents(intent, sample["intents"])
+        loss_slot = criterion_slots(slots, sample["slots"])
+        # In joint training we sum the losses.
+        loss = loss_intent + loss_slot
 
         loss_array.append(loss.item())
 
-        scaler.scale(loss).backward()
+        loss.backward()
 
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
 
-        scaler.step(optimizer)
-        scaler.update()
+        optimizer.step()
     return loss_array
 
 
@@ -146,58 +146,59 @@ def eval_loop(data, criterion_slots, criterion_intents, model, tokenizer, lang):
 
     with torch.no_grad():  # It used to avoid the creation of computational graph
         for sample in data:
-            with autocast():  # Use autocast for mixed precision
-                slots, intents = model(
-                    sample["input_ids"],
-                    sample["attention_mask"],
-                    sample["token_type_ids"],
+            slots, intents = model(
+                sample["input_ids"],
+                sample["attention_mask"],
+                sample["token_type_ids"],
+            )
+            loss_intent = criterion_intents(intents, sample["intents"])
+            loss_slot = criterion_slots(slots, sample["slots"])
+            loss = loss_intent + loss_slot
+            loss_array.append(loss.item())
+
+            # Intent inference
+            out_intents = [
+                lang.id2intent[x] for x in torch.argmax(intents, dim=1).tolist()
+            ]
+
+            gt_intents = [lang.id2intent[x] for x in sample["intents"].tolist()]
+            ref_intents.extend(gt_intents)
+            hyp_intents.extend(out_intents)
+
+            # Slot inference
+            output_slots = torch.argmax(slots, dim=1)
+            for id_seq, seq in enumerate(output_slots):
+                # Decode the tokens using BERT tokenizer
+                tokens = tokenizer.convert_ids_to_tokens(
+                    sample["input_ids"][id_seq]
                 )
-                loss_intent = criterion_intents(intents, sample["intents"])
-                loss_slot = criterion_slots(slots, sample["slots"])
-                loss = loss_intent + loss_slot
-                loss_array.append(loss.item())
-
-                # Intent inference
-                out_intents = [
-                    lang.id2intent[x] for x in torch.argmax(intents, dim=1).tolist()
+                
+                gt_slots = [
+                    lang.id2slot[elem] for elem in sample["slots"][id_seq].tolist()
                 ]
-                gt_intents = [lang.id2intent[x] for x in sample["intents"].tolist()]
-                ref_intents.extend(gt_intents)
-                hyp_intents.extend(out_intents)
 
-                # Slot inference
-                output_slots = torch.argmax(slots, dim=1)
-                for id_seq, seq in enumerate(output_slots):
-                    # Decode the tokens using BERT tokenizer
-                    tokens = tokenizer.convert_ids_to_tokens(
-                        sample["input_ids"][id_seq]
-                    )
-                    gt_slots = [
-                        lang.id2slot[elem] for elem in sample["slots"][id_seq].tolist()
+                # Filter out special tokens
+                filtered_tokens = []
+                filtered_gt_slots = []
+                filtered_pred_slots = []
+                for i, token in enumerate(tokens):
+                    if token not in tokenizer.all_special_tokens:
+                        filtered_tokens.append(token)
+                        filtered_gt_slots.append(gt_slots[i])
+                        filtered_pred_slots.append(seq[i].item())
+
+                ref_slots.append(
+                    [
+                        (filtered_tokens[i], filtered_gt_slots[i])
+                        for i in range(len(filtered_tokens))
                     ]
-
-                    # Filter out special tokens
-                    filtered_tokens = []
-                    filtered_gt_slots = []
-                    filtered_pred_slots = []
-                    for i, token in enumerate(tokens):
-                        if token not in tokenizer.all_special_tokens:
-                            filtered_tokens.append(token)
-                            filtered_gt_slots.append(gt_slots[i])
-                            filtered_pred_slots.append(seq[i].item())
-
-                    ref_slots.append(
-                        [
-                            (filtered_tokens[i], filtered_gt_slots[i])
-                            for i in range(len(filtered_tokens))
-                        ]
-                    )
-                    hyp_slots.append(
-                        [
-                            (filtered_tokens[i], lang.id2slot[filtered_pred_slots[i]])
-                            for i in range(len(filtered_tokens))
-                        ]
-                    )
+                )
+                hyp_slots.append(
+                    [
+                        (filtered_tokens[i], lang.id2slot[filtered_pred_slots[i]])
+                        for i in range(len(filtered_tokens))
+                    ]
+                )
 
     logging.debug(f"REFERENCE: {ref_slots[0]}")
     logging.debug(f"HYPOTHEIS: {hyp_slots[0]}")
@@ -261,14 +262,14 @@ def train(
         # Get model
         # model = ModelBert(model_config, vocab_len, name, pad_index=PAD_TOKEN).to(device)
         model = ModelBert(
-            bert_model_name="bert-base-uncased", out_slot=out_slot, out_int=out_int
+            bert_model_name="bert-base-uncased", out_slot=out_slot, out_int=out_int, name=name
         ).to(device)
 
         optimizer = optim.Adam(model.parameters(), lr=optimizer_config["lr"])
         criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
         criterion_intents = nn.CrossEntropyLoss()
 
-        scaler = torch.cuda.amp.GradScaler()
+        # scaler = torch.cuda.amp.GradScaler()
 
         run_patience = train_config["patience"]
 
@@ -290,7 +291,7 @@ def train(
                 criterion_intents=criterion_intents,
                 model=model,
                 clip=train_config["clip"],
-                scaler=scaler,
+                # scaler=scaler,
             )
 
             if x % 5 == 0:  # We check the performance every 5 epochs
@@ -376,16 +377,17 @@ def train(
     print("Intent Acc", round(intent_acc.mean(), 3), "+-", round(intent_acc.std(), 3))
 
     # Saving the model:
-    PATH = f"bin/{best_model.name}.pt"
-    saving_object = {
-        "epoch": x,
-        "model": model.state_dict(),
-        "optimizer": optimizer.state_dict(),
-        "w2id": w2id,
-        "slot2id": slot2id,
-        "intent2id": intent2id,
-    }
-    torch.save(saving_object, PATH)
+    if best_model is not None:
+        PATH = f"bin/{best_model.name}.pt"
+        saving_object = {
+            "epoch": x,
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "w2id": w2id,
+            "slot2id": slot2id,
+            "intent2id": intent2id,
+        }
+        torch.save(saving_object, PATH)
 
     plt.figure(num=3, figsize=(8, 5)).patch.set_facecolor("white")
     plt.title("Train and Dev Losses")
