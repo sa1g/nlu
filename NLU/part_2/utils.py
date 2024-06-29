@@ -1,1 +1,243 @@
 # Add functions or classes used for data loading and preprocessing
+import json
+import os
+from pprint import pprint
+from collections import Counter
+import torch
+import torch.utils.data as data
+from torch.utils.data import DataLoader
+from sklearn.model_selection import train_test_split
+import logging
+from transformers import BertTokenizer
+
+# Global variables
+device = "cuda:0"
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+PAD_TOKEN = 0
+
+
+def load_data(path):
+    """
+    input: path/to/data
+    output: json
+    """
+    dataset = []
+    with open(path) as f:
+        dataset = json.loads(f.read())
+    return dataset
+
+
+class Lang:
+    def __init__(self, words, intents, slots, cutoff=0):
+        self.word2id = self.w2id(words, cutoff=cutoff, unk=True)
+        self.slot2id = self.lab2id(slots)
+        self.intent2id = self.lab2id(intents, pad=False)
+        self.id2word = {v: k for k, v in self.word2id.items()}
+        self.id2slot = {v: k for k, v in self.slot2id.items()}
+        self.id2intent = {v: k for k, v in self.intent2id.items()}
+
+    def w2id(self, elements, cutoff=None, unk=True):
+        vocab = {"pad": PAD_TOKEN}
+        if unk:
+            vocab["unk"] = len(vocab)
+        count = Counter(elements)
+        for k, v in count.items():
+            if v > cutoff:
+                vocab[k] = len(vocab)
+        return vocab
+
+    def lab2id(self, elements, pad=True):
+        vocab = {}
+        if pad:
+            vocab["pad"] = PAD_TOKEN
+        for elem in elements:
+            vocab[elem] = len(vocab)
+        return vocab
+
+class IntentsAndSlots(data.Dataset):
+    def __init__(self, dataset, lang, bert_model_name='bert-base-uncased', max_length=128):
+        self.utterances = []
+        self.intents = []
+        self.slots = []
+        self.max_length = max_length
+        self.tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+        
+        for x in dataset:
+            self.utterances.append(x['utterance'])
+            self.slots.append(x['slots'])
+            self.intents.append(x['intent'])
+
+        self.slot_ids = self.mapping_seq(self.slots, lang.slot2id)
+        self.intent_ids = self.mapping_lab(self.intents, lang.intent2id)
+
+    def __len__(self):
+        return len(self.utterances)
+
+    def __getitem__(self, idx):
+        utterance = self.utterances[idx]
+        slots = self.slot_ids[idx]
+        intent = self.intent_ids[idx]
+
+        encoding = self.tokenizer(
+            utterance,
+            padding='max_length',
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors='pt'
+        )
+
+        input_ids = encoding['input_ids'].squeeze(0)
+        attention_mask = encoding['attention_mask'].squeeze(0)
+        token_type_ids = encoding['token_type_ids'].squeeze(0)
+
+        slots = torch.tensor(slots + [0] * (self.max_length - len(slots)))  # Padding slots to max_length
+
+        sample = {
+            'input_ids': input_ids,
+            'attention_mask': attention_mask,
+            'token_type_ids': token_type_ids,
+            'slots': slots,
+            'intent': torch.tensor(intent)
+        }
+        return sample
+    
+    def mapping_lab(self, data, mapper):
+        return [mapper[x] if x in mapper else mapper['unk'] for x in data]
+    
+    def mapping_seq(self, data, mapper):
+        res = []
+        for seq in data:
+            tmp_seq = []
+            for x in seq.split():
+                if x in mapper:
+                    tmp_seq.append(mapper[x])
+                else:
+                    tmp_seq.append(mapper['unk'])
+            res.append(tmp_seq)
+        return res
+
+
+def collate_fn(data):
+    input_ids = torch.stack([item['input_ids'] for item in data])
+    attention_mask = torch.stack([item['attention_mask'] for item in data])
+    token_type_ids = torch.stack([item['token_type_ids'] for item in data])
+    slots = torch.stack([item['slots'] for item in data])
+    intents = torch.tensor([item['intent'] for item in data])
+    
+    return {
+        'input_ids': input_ids.to(device),
+        'attention_mask': attention_mask.to(device),
+        'token_type_ids': token_type_ids.to(device),
+        'slots': slots.to(device),
+        'intents': intents.to(device),
+    }
+
+def split_dev_set(tmp_train_raw, test_raw):
+    portion = 0.10
+
+    intents = [x["intent"] for x in tmp_train_raw]  # We stratify on intents
+    count_y = Counter(intents)
+
+    labels = []
+    inputs = []
+    mini_train = []
+
+    for id_y, y in enumerate(intents):
+        if count_y[y] > 1:  # If some intents occurs only once, we put them in training
+            inputs.append(tmp_train_raw[id_y])
+            labels.append(y)
+        else:
+            mini_train.append(tmp_train_raw[id_y])
+
+    # Random Stratify
+    X_train, X_dev, y_train, y_dev = train_test_split(
+        inputs,
+        labels,
+        test_size=portion,
+        random_state=42,
+        shuffle=True,
+        stratify=labels,
+    )
+
+    X_train.extend(mini_train)
+    train_raw = X_train
+    dev_raw = X_dev
+
+    y_test = [x["intent"] for x in test_raw]
+
+    # Dataset size
+    logging.debug("Train size %i", len(train_raw))
+    logging.debug("DEV size %i", len(dev_raw))
+    logging.debug("TEST size %i", len(test_raw))
+
+    return train_raw, dev_raw, test_raw
+
+
+def get_loaders_lang(dataset_path, train_batch_size, dev_batch_size, test_batch_size):
+    tmp_train_raw = load_data(os.path.join(dataset_path, "train.json"))
+    test_raw = load_data(os.path.join(dataset_path, "test.json"))
+
+    logging.debug("Train samples: %s", len(tmp_train_raw))
+    logging.debug("Test samples: %s", len(test_raw))
+
+    train_raw, dev_raw, test_raw = split_dev_set(tmp_train_raw, test_raw)
+
+    w2id = {'pad':PAD_TOKEN, 'unk': 1}
+    slot2id = {'pad':PAD_TOKEN}
+    intent2id = {}
+
+    # Map the words only from the train set
+    # Map slot and intent labels of train, dev and test set. 'unk' is not needed.
+    for example in train_raw:
+        for w in example['utterance'].split():
+            if w not in w2id:
+                w2id[w] = len(w2id)   
+        for slot in example['slots'].split():
+            if slot not in slot2id:
+                slot2id[slot] = len(slot2id)
+        if example['intent'] not in intent2id:
+            intent2id[example['intent']] = len(intent2id)
+            
+    for example in dev_raw:
+        for slot in example['slots'].split():
+            if slot not in slot2id:
+                slot2id[slot] = len(slot2id)
+        if example['intent'] not in intent2id:
+            intent2id[example['intent']] = len(intent2id)
+            
+    for example in test_raw:
+        for slot in example['slots'].split():
+            if slot not in slot2id:
+                slot2id[slot] = len(slot2id)
+        if example['intent'] not in intent2id:
+            intent2id[example['intent']] = len(intent2id)
+
+    logging.debug(
+        "# Vocabulary size: %i", len(w2id) - 2
+    )  # we remove pad and unk from the count
+    logging.debug("# Slots: %i", len(slot2id) - 1)
+    logging.debug("# Intent: %i", len(intent2id))
+
+    words = sum(
+        [x["utterance"].split() for x in train_raw], []
+    )  # No set() since we want to compute the cutoff
+    corpus = train_raw + dev_raw + test_raw  # We do not wat unk labels,
+    # however this depends on the research purpose
+    slots = set(sum([line["slots"].split() for line in corpus], []))
+    intents = set([line["intent"] for line in corpus])
+
+    lang = Lang(words, intents, slots, cutoff=0)
+
+    # Create our datasets
+    train_dataset = IntentsAndSlots(train_raw, lang)
+    dev_dataset = IntentsAndSlots(dev_raw, lang)
+    test_dataset = IntentsAndSlots(test_raw, lang)
+
+    # Dataloader instantiations
+    train_loader = DataLoader(
+        train_dataset, batch_size=train_batch_size, collate_fn=collate_fn, shuffle=True
+    )
+    dev_loader = DataLoader(dev_dataset, batch_size=dev_batch_size, collate_fn=collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size=test_batch_size, collate_fn=collate_fn)
+
+    return train_loader, dev_loader, test_loader, lang, w2id, slot2id, intent2id, train_dataset.tokenizer
