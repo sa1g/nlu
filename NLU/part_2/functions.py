@@ -168,6 +168,7 @@ def eval_loop(data, criterion_slots, criterion_intents, model, tokenizer, lang):
             # Slot inference
             output_slots = torch.argmax(slots, dim=1)
             for id_seq, seq in enumerate(output_slots):
+                
                 # Decode the tokens using BERT tokenizer
                 tokens = tokenizer.convert_ids_to_tokens(
                     sample["input_ids"][id_seq]

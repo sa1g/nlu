@@ -4,7 +4,7 @@
         "train_batch_size": 64,
         "dev_batch_size": 64,
         "test_batch_size": 64,
-        "n_epochs": 1,
+        "n_epochs": 2,
         "clip": 5,
         "patience":3,
         "lr": 0.001,
