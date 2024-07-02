@@ -207,7 +207,12 @@ if __name__ == "__main__":
     intent_labels_list = list(intent_set)
 
     slot_label_map = {label: idx for idx, label in enumerate(slot_labels_list)}
-    # slot_label_map["<PAD>"] = len(slot_label_map)+1
+
+    tmp = list(slot_label_map.keys())[list(slot_label_map.values()).index(0)]
+    tmp_value = slot_label_map["<PAD>"]
+    slot_label_map["<PAD>"] = 0
+    slot_label_map[tmp] = tmp_value
+
     intent_label_map = {label: idx for idx, label in enumerate(intent_labels_list)}
 
     train_dataloader = create_dataloader(train_raw)
@@ -322,27 +327,25 @@ if __name__ == "__main__":
             print(f"slot_p: {slot_p[0]}")
             print(f"slot_labels: {slot_labels[0]}")
 
-            exit()
             # Intention reference
-            # TODO
             accuracy_intention = classification_report(
                 intent_labels.to("cpu"),
                 intent_p.to("cpu"),
                 output_dict=True,
                 zero_division=False,
             )
+            exit()
             # Slot reference
-            # TODO
-            print(slot_labels.to('cpu').tolist())
-            print(slot_p.to('cpu').tolist())
+            # TODO: understand hoow to make it work AAAAAaaaAAAAaaAAAAaaaAA 
+            print(slot_labels.to("cpu").tolist())
+            print(slot_p.to("cpu").tolist())
 
             # try:
             f1_slot = evaluate(slot_labels, slot_p)
             # except Exception as ex:
-                # print("Error: ", ex)
-                # exit()
+            # print("Error: ", ex)
+            # exit()
             exit()
-
 
         # accuracy_intention = 0 # classification report
         print("====== ACCURACY INTENTION: ", accuracy_intention["accuracy"])
