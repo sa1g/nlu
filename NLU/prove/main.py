@@ -32,8 +32,8 @@ def custom_collate_fn(batch):
 logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.DEBUG)
 
 if __name__ == "__main__":
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = "cpu"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = "cpu"
     """
     LOAD DATA
     """
