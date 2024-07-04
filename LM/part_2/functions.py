@@ -117,16 +117,19 @@ def get_loaders_lang(
 
 
 def get_model(config: dict, device) -> nn.Module:
-    if config["model_type"] == "LM_RNN":
-        logging.debug("LM_RNN")
-        model = LM_RNN(config).to(device)
-    elif config["model_type"] == "LM_LSTM":
+    # if config["model_type"] == "LM_RNN":
+    #     logging.debug("LM_RNN")
+    #     model = LM_RNN(config).to(device)
+    if config["model_type"] == "LM_LSTM":
         logging.debug("LM_LSTM")
         model = LM_LSTM(config).to(device)
-    elif config["model_type"] == "LM_LSTM_WS":
-        model = LM_LSTM_WS(config).to(device)
-    elif config["model_type"] == "LM_LSTM_VD":
-        model = LM_LSTM_VD(config).to(device)
+        # model = LM_RNN(config).to(device)
+    else:
+        raise ValueError("Model not found")
+    # elif config["model_type"] == "LM_LSTM_WS":
+        # model = LM_LSTM_WS(config).to(device)
+    # elif config["model_type"] == "LM_LSTM_VD":
+        # model = LM_LSTM_VD(config).to(device)
 
     if init_weights:
         model.apply(config["init_weights"])
@@ -155,7 +158,7 @@ def get_optimizer(model: nn.Module, config: dict = {}):
         return NTAvSGD(
             model.parameters(),
             lr=config["lr"],
-            momentum=0,
+            momentum=config["momentum"],
             dampening=0,
             weight_decay=config["weight_decay"],
             nesterov=False,

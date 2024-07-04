@@ -56,7 +56,7 @@ def main(train_config: dict, model_config: dict, optimizer_config: dict):
         dev_loader=dev_loader,
         test_loader=test_loader,
         device=DEVICE,
-        patience=config["patience"]
+        patience=train_config["patience"]
     )
 
 

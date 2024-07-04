@@ -1,6 +1,7 @@
 from collections import Counter
 import json
 import os
+from pprint import pprint
 import numpy as np
 from sklearn.model_selection import train_test_split
 import torch
@@ -43,28 +44,23 @@ def create_dataloader(raw):
     inputs = [t["utterance"] for t in raw]
     intent_labels = [intent_label_map[t["intent"]] for t in raw]
     slot_labels = [
-        [slot_label_map[label] for label in t["slots"].split(" ")] for t in raw
+        [slot_label_map[label] for label in t["slots"].split()] for t in raw
     ]
 
-    # TRAIN size: 4480
-    # DEV size: 498
-    # TEST size: 893
-    # # Words: 864
-    # # Slots: 129
-    # # Intent: 26
+    # inputs: what is the cost for these flights from baltimore to philadelphia
+    # intent_labels: 19
+    # slot_labels: [121, 121, 121, 121, 121, 121, 121, 121, 69, 121, 82]
+    # inputs: 4480
+    # intent_labels: 4480
+    # slot_labels: 4480
 
-    # print(f"intent_labels: {intent_labels}")
-    # print("intent_labels map: ", intent_label_map)
+    # print(f"inputs: {inputs[0]}")
+    # print(f"intent_labels: {intent_labels[0]}")
+    # print(f"slot_labels: {slot_labels[0]}")
 
-    # for i, _ in enumerate(raw):
-    #     # print(f"raw: {raw[i]['intent']}, intent: {intent_labels[i]}")
-    #     print(f"raw: {raw[i]['slots']}, slots: {slot_labels[i]}")
-
-    #     # exit()
-
-    # # print(f"slot labels: {slot_labels}")
-    # # print("slot labels map: ", slot_label_map)
-    # exit()
+    # print(f"inputs: {len(inputs)}")
+    # print(f"intent_labels: {len(intent_labels)}")
+    # print(f"slot_labels: {len(slot_labels)}")
 
     # Tokenize inputs
     encoded_inputs = tokenizer(
@@ -74,6 +70,9 @@ def create_dataloader(raw):
         padding="max_length",
         max_length=64,
     )
+    # encorded_inputs input_ids: torch.Size([4480, 64])
+    # encorded_inputs attention_mask: torch.Size([4480, 64])
+
     input_ids = encoded_inputs["input_ids"]
     attention_mask = encoded_inputs["attention_mask"]
 
@@ -81,8 +80,11 @@ def create_dataloader(raw):
     max_len = input_ids.shape[1]
     padded_slot_labels = []
     for label in slot_labels:
-        padded_label = label + [slot_label_map["<PAD>"]] * (
-            max_len - len(label)
+        padded_label = (
+            [slot_label_map["[CLS]"]]
+            + label
+            + [slot_label_map["[SEP]"]]
+            + [slot_label_map["[PAD]"]] * (max_len - len(label) - 2)
         )  # Padding with "O"
         padded_slot_labels.append(padded_label)
     slot_labels = torch.tensor(padded_slot_labels)
@@ -97,6 +99,37 @@ def create_dataloader(raw):
     attention_mask = attention_mask.to(device)
     intent_labels = intent_labels.to(device)
     slot_labels = slot_labels.to(device)
+
+    # input_ids: tensor([ 101, 2054, 2003, 1996, 3465, 2005, 2122, 7599, 2013, 6222, 2000, 4407,
+    #         102,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
+    #         0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
+    #         0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
+    #         0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
+    #         0,    0,    0,    0], device='cuda:0')
+    # attention_mask: tensor([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    #         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    #         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], device='cuda:0')
+    # intent_labels: 7
+    # slot_labels: tensor([ 1, 82, 82, 82, 82, 82, 82, 82, 82, 90, 82, 54,  2,  0,  0,  0,  0,  0,
+    #         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    #         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    #         0,  0,  0,  0,  0,  0,  0,  0,  0,  0], device='cuda:0')
+
+    # input_ids: torch.Size([4480, 64])
+    # attention_mask: torch.Size([4480, 64])
+    # intent_labels: torch.Size([4480])
+    # slot_labels: torch.Size([4480, 64])
+
+    # print(f"input_ids: {input_ids[0]}")
+    # print(f"attention_mask: {attention_mask[0]}")
+    # print(f"intent_labels: {intent_labels[0]}")
+    # print(f"slot_labels: {slot_labels[0]}")
+
+    # print(f"input_ids: {input_ids.shape}")
+    # print(f"attention_mask: {attention_mask.shape}")
+    # print(f"intent_labels: {intent_labels.shape}")
+    # print(f"slot_labels: {slot_labels.shape}")
+    exit()
 
     dataset = TensorDataset(input_ids, attention_mask, intent_labels, slot_labels)
     dataloader = DataLoader(dataset, batch_size=64)
@@ -157,7 +190,10 @@ if __name__ == "__main__":
     # Count the number of unique words, slot and intent tags
     words_set = set()
     slot_set = set()
-    slot_set.add("<PAD>")
+    slot_set.add("[PAD]")
+    slot_set.add("[CLS]")
+    slot_set.add("[SEP]")
+
     intent_set = set()
 
     for example in train_raw:
@@ -203,15 +239,21 @@ if __name__ == "__main__":
     #####
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
+    # words_list = list(words_set)
     slot_labels_list = list(slot_set)
     intent_labels_list = list(intent_set)
 
     slot_label_map = {label: idx for idx, label in enumerate(slot_labels_list)}
 
-    tmp = list(slot_label_map.keys())[list(slot_label_map.values()).index(0)]
-    tmp_value = slot_label_map["<PAD>"]
-    slot_label_map["<PAD>"] = 0
-    slot_label_map[tmp] = tmp_value
+    for i, special_token in enumerate(["[PAD]", "[CLS]", "[SEP]"]):
+        tmp = list(slot_label_map.keys())[list(slot_label_map.values()).index(i)]
+        tmp_value = slot_label_map[special_token]
+        slot_label_map[special_token] = i
+        slot_label_map[tmp] = tmp_value
+
+    # pprint(slot_label_map)
+    # exit()
+    slot_id2word = {v: k for k, v in slot_label_map.items()}
 
     intent_label_map = {label: idx for idx, label in enumerate(intent_labels_list)}
 
@@ -293,7 +335,7 @@ if __name__ == "__main__":
         optimizer.step()
         return loss.item()
 
-    def eval_loop(model, data, intent_loss_fn, slot_loss_fn):
+    def eval_loop(model, data, intent_loss_fn, slot_loss_fn, tokenizer):
         model.eval()
         total_loss = []
 
@@ -322,10 +364,15 @@ if __name__ == "__main__":
             slot_p = torch.argmax(slot_logits, dim=2)
 
             print("========== EVAL ===========")
-            print(f"intent_p: {intent_p[0]}")
-            print(f"intent_labels: {intent_labels[0]}")
-            print(f"slot_p: {slot_p[0]}")
-            print(f"slot_labels: {slot_labels[0]}")
+            # print(f"intent_p: {intent_p[0]}")
+            # print(f"intent_labels: {intent_labels[0]}")
+            # print(f"slot_p: {slot_p[0]}")
+            # print(f"slot_labels: {slot_labels[0]}")
+
+            # print("intnt_p.shape: ", intent_p.shape)
+            # print("intent_labels.shape: ", intent_labels.shape)
+            # print("slot_p.shape: ", slot_p.shape)
+            # print("slot_labels.shape: ", slot_labels.shape)
 
             # Intention reference
             accuracy_intention = classification_report(
@@ -334,14 +381,82 @@ if __name__ == "__main__":
                 output_dict=True,
                 zero_division=False,
             )
-            exit()
+
+            # DEBUG:Ref: [('i', 'O'), ('need', 'O'), ('to', 'O'), ('fly', 'O'), ('from', 'O'), ('washington', 'B-fromloc.city_name'), ('to', 'O'), ('san', 'B-toloc.city_name'), ('francisco', 'I-toloc.city_name'), ('but', 'O'), ('i', 'O'), ("'d", 'O'), ('like', 'O'), ('to', 'O'), ('stop', 'O'), ('over', 'O'), ('at', 'O'), ('dallas', 'B-stoploc.city_name'), ('can', 'O'), ('you', 'O'), ('tell', 'O'), ('me', 'O'), ('a', 'O'), ('schedule', 'B-flight_time'), ('of', 'O'), ('flights', 'O'), ('that', 'O'), ('will', 'O'), ('do', 'O'), ('that', 'O')]
+            # DEBUG:Hyp: [('i', 'O'), ('need', 'O'), ('to', 'O'), ('fly', 'O'), ('from', 'O'), ('washington', 'O'), ('to', 'O'), ('san', 'B-toloc.city_name'), ('francisco', 'I-toloc.city_name'), ('but', 'B-toloc.city_name'), ('i', 'O'), ("'d", 'O'), ('like', 'O'), ('to', 'O'), ('stop', 'B-toloc.city_name'), ('over', 'B-flight_number'), ('at', 'O'), ('dallas', 'B-fromloc.airport_name'), ('can', 'B-economy'), ('you', 'I-round_trip'), ('tell', 'B-or'), ('me', 'O'), ('a', 'O'), ('schedule', 'O'), ('of', 'O'), ('flights', 'O'), ('that', 'O'), ('will', 'O'), ('do', 'B-depart_time.start_time'), ('that', 'B-depart_time.start_time')]
+            # exit()
             # Slot reference
-            # TODO: understand hoow to make it work AAAAAaaaAAAAaaAAAAaaaAA 
-            print(slot_labels.to("cpu").tolist())
-            print(slot_p.to("cpu").tolist())
+            # TODO: understand hoow to make it work AAAAAaaaAAAAaaAAAAaaaAA
+
+            slot_ref = slot_labels.to("cpu").tolist()
+            slot_hyp = slot_p.to("cpu").tolist()
+
+            # ref: Any,
+            # hyp: Any,
+            ref, hyp = [], []
+
+            print("{:15} : {:15} : {:15}".format("RAW", "REF", "HYP"))
+            for i, (refs, hyps) in enumerate(zip(slot_ref, slot_hyp)):
+                
+                # Decode the raw input for the current sequence
+                raw_input = tokenizer.decode(input_ids[i], skip_special_tokens=False).split()
+
+                if len(raw_input) != len(refs):
+                    # Iterate over the tokens in the sequence
+                    for j, (ref, hyp) in enumerate(zip(refs, hyps)):
+                        # Print the token, its reference label, and its hypothesis label
+                        try:
+                            print("{:15} : {:15} : {:15}".format(raw_input[j], slot_id2word[ref], slot_id2word[hyp]))
+                        except Exception as ex:
+                            print("{:15} : {:15} : {:15}".format("", slot_id2word[ref], slot_id2word[hyp]))
+                    exit()
+            
+            exit()
+
+            for i, labels in enumerate(slot_ref):
+                raw_input = tokenizer.decode(
+                    input_ids[i], skip_special_tokens=False
+                ).split()
+                tmp = []
+
+                # print("RAW INPUT: ", len(raw_input))
+                # print("LABELS: ", len(labels))
+
+                if len(raw_input) != len(labels):
+                    print(raw_input)
+                    exit()
+
+                for j, label in enumerate(labels):
+                    #     tmp.append( (f"{raw_input[j]}", f"{label}"))
+                    tmp.append((f"{raw_input[j]}", f"{slot_id2word[label]}"))
+
+                    # print(f"{raw_input[j]}:: {slot_id2word[label]}")
+
+                ref.append(tmp)
+
+            for i, labels in enumerate(slot_hyp):
+                raw_input = tokenizer.decode(
+                    input_ids[i], skip_special_tokens=False
+                ).split()
+                tmp = []
+                for label in labels:
+                    # tmp.append( (f"{slot_id2label[label]}", f"{label}"))
+                    tmp.append((f"{raw_input[j]}", f"{slot_id2word[label]}"))
+                hyp.append(tmp)
+
+            # print(ref[0])
+            # print(hyp[0])
+            # exit()
+
+            # ref = [[('i', 'O'), ('need', 'O'), ('to', 'O'), ('fly', 'O'), ('from', 'O'), ('washington', 'B-fromloc.city_name'), ('to', 'O'), ('san', 'B-toloc.city_name'), ('francisco', 'I-toloc.city_name'), ('but', 'O'), ('i', 'O'), ("'d", 'O'), ('like', 'O'), ('to', 'O'), ('stop', 'O'), ('over', 'O'), ('at', 'O'), ('dallas', 'B-stoploc.city_name'), ('can', 'O'), ('you', 'O'), ('tell', 'O'), ('me', 'O'), ('a', 'O'), ('schedule', 'B-flight_time'), ('of', 'O'), ('flights', 'O'), ('that', 'O'), ('will', 'O'), ('do', 'O'), ('that', 'O')]]
+            # hyp = [[('i', 'O'), ('need', 'O'), ('to', 'O'), ('fly', 'O'), ('from', 'O'), ('washington', 'O'), ('to', 'O'), ('san', 'B-toloc.city_name'), ('francisco', 'I-toloc.city_name'), ('but', 'B-toloc.city_name'), ('i', 'O'), ("'d", 'O'), ('like', 'O'), ('to', 'O'), ('stop', 'B-toloc.city_name'), ('over', 'B-flight_number'), ('at', 'O'), ('dallas', 'B-fromloc.airport_name'), ('can', 'B-economy'), ('you', 'I-round_trip'), ('tell', 'B-or'), ('me', 'O'), ('a', 'O'), ('schedule', 'O'), ('of', 'O'), ('flights', 'O'), ('that', 'O'), ('will', 'O'), ('do', 'B-depart_time.start_time'), ('that', 'B-depart_time.start_time')]]
+
+            # [('O', '18'), ('O', '18'), ('O', '18'), ('O', '18'), ('O', '18'), ('O', '18'), ('O', '18'), ('O', '18'), ('B-fromloc.city_name', '15'), ('O', '18'), ('B-toloc.city_name', '72'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0')]
+            # [('[PAD]', '0'), ('[PAD]', '0'), ('B-flight_time', '126'), ('I-flight_mod', '6'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('I-depart_time.period_of_day', '115'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0')]
 
             # try:
-            f1_slot = evaluate(slot_labels, slot_p)
+            f1_slot = evaluate(ref[0], hyp[0])
+            print(f1_slot)
             # except Exception as ex:
             # print("Error: ", ex)
             # exit()
@@ -357,7 +472,7 @@ if __name__ == "__main__":
         for index, batch in enumerate(train_dataloader):
             loss = train_loop(model, batch, optimizer, intent_loss_fn, slot_loss_fn)
 
-            if index % 5 == 0:
-                eval_loop(model, batch, intent_loss_fn, slot_loss_fn)
+            # if index % 5 == 0:
+            #     eval_loop(model, batch, intent_loss_fn, slot_loss_fn, tokenizer)
 
             print(f"Epoch: {epoch}, Loss: {loss :.4f}")

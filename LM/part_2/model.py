@@ -2,9 +2,11 @@ import torch
 import torch.nn as nn
 import logging
 
+
 def variational_dropout(x, mask):
     mask = mask.expand_as(x)
     return x * mask
+
 
 class LM_RNN(nn.Module):
     def __init__(self, config: dict):
@@ -53,17 +55,19 @@ class LM_LSTM(nn.Module):
         out_dropout: int = 0,
         n_layers: int = 1,
         """
-        assert not ((config["emb_dropout"] or config["out_dropout"]) and config["variational_dropout"])
+        super().__init__()
+
+        assert not (
+            (config["emb_dropout"] or config["out_dropout"])
+            and config["variational_dropout"]
+        )
 
         self.config = config
 
-        if (config["emb_dropout"] != 0):
+        if config["emb_dropout"] != 0:
             logging.debug("emb dropout activated")
-        if (config["out_dropout"] != 0):
+        if config["out_dropout"] != 0:
             logging.debug("out dropout activated")
-
-
-        super().__init__()
 
         self.name = f"{self.__class__.__name__}_emb_{config['emb_size']}_hid_{config['hid_size']}_edr_{config['emb_dropout']}_odr_{config['out_dropout']}_lay_{config['n_layers']}_weight_tying_{config['weight_tying']}__variational_dropout_{config['variational_dropout']}_optim_{config['optim_name']}"
         logging.debug("LM_LSTM")
@@ -72,9 +76,9 @@ class LM_LSTM(nn.Module):
             config["output_size"], config["emb_size"], padding_idx=config["pad_index"]
         )
         # Dropout can be either activated or not
-        if self.config['emb_dropout'] != 0:
+        if self.config["emb_dropout"] != 0:
             self.emb_dropout = nn.Dropout(config["emb_dropout"])
-        
+
         # LSTM model
         self.rnn = nn.LSTM(
             config["emb_size"],
@@ -84,44 +88,40 @@ class LM_LSTM(nn.Module):
         )
 
         # Dropout can be either activated or not
-        if self.config['out_dropout'] != 0:
+        if self.config["out_dropout"] != 0:
             self.out_dropout = nn.Dropout(config["out_dropout"])
-        
+
         self.output = nn.Linear(config["hid_size"], config["output_size"])
-        
+
         # if there's variational dropout manage it
         if config["variational_dropout"] != 0:
             self.var_dropout_perc = config["variational_dropout"]
 
-
         # Enable/disable weight share
         if config["weight_tying"]:
-            assert config['emb_size'] == config['hid_size']
+            assert config["emb_size"] == config["hid_size"]
             self.output.weight = self.embedding.weight
 
-
     def forward(self, input_sequence):
-        if self.config['variational_dropout'] != 0:
-            mask = input_sequence.new(
-            (input_sequence.size(0), 1, input_sequence(2))
-            .bernulli_(1 - self.var_dropout_perc)
-            .div_(1 - self.var_dropout_perc)
-        )
-
         emb = self.embedding(input_sequence)
-        
-        if self.config['emb_dropout'] != 0:
+
+        if self.config["emb_dropout"] != 0:
             emb = self.emb_dropout(emb)
 
-        if self.config['variational_dropout'] != 0:
+        if self.config["variational_dropout"] != 0:
+            mask = (
+                emb.new(emb.size(0), 1, emb.size(2))
+                .bernoulli_(1 - self.var_dropout_perc)
+                .div_(1 - self.var_dropout_perc)
+            )
             emb = variational_dropout(emb, mask)
 
         rnn, _ = self.rnn(emb)
-        
-        if self.config['out_dropout'] != 0:
+
+        if self.config["out_dropout"] != 0:
             rnn = self.out_dropout(rnn)
 
-        if self.config['variational_dropout'] != 0:
+        if self.config["variational_dropout"] != 0:
             rnn = variational_dropout(rnn, mask)
 
         out = self.output(rnn)
