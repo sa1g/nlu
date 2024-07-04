@@ -49,23 +49,48 @@ if __name__ == "__main__":
     model = IntentSlotModel(bert_model, tokenizer.slot_len, tokenizer.intent_len)
     model.to(device)
 
+    # Optimizer
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
+
+    # Loss functions
+    # TODO: in intention maybe ignore padding, start, end sequence
+    intent_loss_fn = torch.nn.CrossEntropyLoss()
+    slot_loss_fn = torch.nn.CrossEntropyLoss()
+
     for batch in dataset:
         
-        input_ids, attention_mask, intent_labels, slot_labels = batch
+        # input_ids, attention_mask, intent_labels, slot_labels = batch
+        # intent_labels = intent_labels.squeeze(1)
 
-        # print(input_ids.shape)
-        # print(attention_mask.shape)
-        # print(intent_labels.shape)
-        # print(slot_labels.shape)
+        loss = train_loop(model, batch, optimizer, intent_loss_fn, slot_loss_fn, tokenizer)
+        print(f"Loss: {loss}")
+
+        # intent_logits, slot_logits = model(input_ids, attention_mask)
+        # intent_loss = intent_loss_fn(intent_logits, intent_labels)
+        # slot_loss = slot_loss_fn(
+        #     slot_logits.view(-1, tokenizer.slot_len), slot_labels.view(-1)
+        # )
+
+        # loss = intent_loss + slot_loss
+        # print(f"Loss: {loss}")
         # exit()
 
-        print(model(input_ids, attention_mask))
+
+        # # waht it is:
+        # torch.Size([64, 26])
+        # torch.Size([64, 1])
+        # torch.Size([64, 64, 130])
+        # torch.Size([64, 64])
+
+        # # what it should be
+        # torch.Size([64, 26])
+        # torch.Size([64])
+        # torch.Size([64, 64, 132])
+        # torch.Size([64, 64])
+
+
 
         
-        # print(batch[0])
-        exit()
-
-    # print(model(tmp_d['input_ids'][0:32], tmp_d['attention_mask'][0:32])[0].shape)
 
     exit()
 
@@ -80,47 +105,6 @@ if __name__ == "__main__":
     test_dataloader = DataLoader(
         test_dataset, batch_size=32, shuffle=False, collate_fn=custom_collate_fn)
 
-    
-
-
-
-    # element = train_dataset[0]
-    # input_ids = element['input_ids']
-    # attention_mask = element['attention_mask']
-
-    # output = model(input_ids, attention_mask)
-
-    # print(output[0].shape)
-    # print(output[1].shape)
-
-    # bert_model.to(device)
-
-    # tokenized_phrase = tokenizer(train_raw[0]['utterance'], return_tensors="pt", add_special_tokens=True, padding="max_length", max_length=64)
-    # input_ids = tokenized_phrase["input_ids"].squeeze(0).to(device)
-    # attention_mask = tokenized_phrase["attention_mask"].squeeze(0).to(device)
-
-    
-    # print(bert_model(input_ids, attention_mask))
-
-
-
-    # Optimizer
-    optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
-
-    # Loss functions
-    # TODO: in intention maybe ignore padding, start, end sequence
-    intent_loss_fn = torch.nn.CrossEntropyLoss()
-    slot_loss_fn = torch.nn.CrossEntropyLoss()
-
-    # # train 
-    for epoch in range(3):  # Example: 3 epochs
-        for index, batch in enumerate(train_dataloader):
-            loss = train_loop(model, batch, optimizer, intent_loss_fn, slot_loss_fn)
-
-            # if index % 5 == 0:
-            #     eval_loop(model, batch, intent_loss_fn, slot_loss_fn, tokenizer)
-
-            print(f"Epoch: {epoch}, Loss: {loss :.4f}")
 
 
 

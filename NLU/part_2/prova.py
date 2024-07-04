@@ -129,7 +129,6 @@ def create_dataloader(raw):
     # print(f"attention_mask: {attention_mask.shape}")
     # print(f"intent_labels: {intent_labels.shape}")
     # print(f"slot_labels: {slot_labels.shape}")
-    exit()
 
     dataset = TensorDataset(input_ids, attention_mask, intent_labels, slot_labels)
     dataloader = DataLoader(dataset, batch_size=64)
@@ -251,8 +250,6 @@ if __name__ == "__main__":
         slot_label_map[special_token] = i
         slot_label_map[tmp] = tmp_value
 
-    # pprint(slot_label_map)
-    # exit()
     slot_id2word = {v: k for k, v in slot_label_map.items()}
 
     intent_label_map = {label: idx for idx, label in enumerate(intent_labels_list)}
@@ -306,6 +303,12 @@ if __name__ == "__main__":
         # Forward
         intent_logits, slot_logits = model(input_ids, attention_mask)
 
+        print(intent_logits.shape)
+        print(intent_labels.shape)
+        print(slot_logits.shape)
+        print(slot_labels.shape)
+        exit()
+
         # intent_logits = torch.argmax(intent_logits, dim=1)
         # slot_logits = torch.argmax(slot_logits, dim=2)
 
@@ -328,7 +331,6 @@ if __name__ == "__main__":
             intent_labels,
             slot_labels,
         )
-        # exit()
 
         optimizer.zero_grad()
         loss.backward()
@@ -384,7 +386,7 @@ if __name__ == "__main__":
 
             # DEBUG:Ref: [('i', 'O'), ('need', 'O'), ('to', 'O'), ('fly', 'O'), ('from', 'O'), ('washington', 'B-fromloc.city_name'), ('to', 'O'), ('san', 'B-toloc.city_name'), ('francisco', 'I-toloc.city_name'), ('but', 'O'), ('i', 'O'), ("'d", 'O'), ('like', 'O'), ('to', 'O'), ('stop', 'O'), ('over', 'O'), ('at', 'O'), ('dallas', 'B-stoploc.city_name'), ('can', 'O'), ('you', 'O'), ('tell', 'O'), ('me', 'O'), ('a', 'O'), ('schedule', 'B-flight_time'), ('of', 'O'), ('flights', 'O'), ('that', 'O'), ('will', 'O'), ('do', 'O'), ('that', 'O')]
             # DEBUG:Hyp: [('i', 'O'), ('need', 'O'), ('to', 'O'), ('fly', 'O'), ('from', 'O'), ('washington', 'O'), ('to', 'O'), ('san', 'B-toloc.city_name'), ('francisco', 'I-toloc.city_name'), ('but', 'B-toloc.city_name'), ('i', 'O'), ("'d", 'O'), ('like', 'O'), ('to', 'O'), ('stop', 'B-toloc.city_name'), ('over', 'B-flight_number'), ('at', 'O'), ('dallas', 'B-fromloc.airport_name'), ('can', 'B-economy'), ('you', 'I-round_trip'), ('tell', 'B-or'), ('me', 'O'), ('a', 'O'), ('schedule', 'O'), ('of', 'O'), ('flights', 'O'), ('that', 'O'), ('will', 'O'), ('do', 'B-depart_time.start_time'), ('that', 'B-depart_time.start_time')]
-            # exit()
+
             # Slot reference
             # TODO: understand hoow to make it work AAAAAaaaAAAAaaAAAAaaaAA
 

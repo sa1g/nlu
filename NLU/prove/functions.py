@@ -1,3 +1,7 @@
+from model import IntentSlotModel
+from utils import Tokenizer
+
+
 def calculate_loss(
     intent_loss_fn,
     slot_loss_fn,
@@ -5,54 +9,60 @@ def calculate_loss(
     slot_logits,
     intent_labels,
     slot_labels,
+    tokenizer: Tokenizer,
 ):
     intent_loss = intent_loss_fn(intent_logits, intent_labels)
-    slot_loss = slot_loss_fn(slot_logits, slot_labels)
+    slot_loss = slot_loss_fn(
+        slot_logits.view(-1, tokenizer.slot_len), slot_labels.view(-1)
+    )
 
     return intent_loss + slot_loss
 
 
 def train_loop(
-    model, data, optimizer, intent_loss_fn, slot_loss_fn, clip=5, device: str = "cuda:0"
+    model: IntentSlotModel,
+    data,
+    optimizer,
+    intent_loss_fn,
+    slot_loss_fn,
+    tokenizer: Tokenizer,
+    clip=5,
+    device: str = "cuda:0",
 ):
     model.train()
 
-    # input_ids, attention_mask, intent_labels, slot_labels = data
+    input_ids, attention_mask, intent_labels, slot_labels = data
 
-    # input_ids = input_ids.to(device)
-    # attention_mask = attention_mask.to(device)
-    # intent_labels = intent_labels.to(device)
-    # slot_labels = slot_labels.to(device)
+    intent_labels = intent_labels.squeeze(1)
 
-    # Forward
-    intent_logits, slot_logits = model(data['input_ids'], data['attention_mask'])
+    # loss = train_loop(model, batch, optimizer, intent_loss_fn, slot_loss_fn, tokenizer)
+    # print(f"Loss: {loss}")
 
-    # intent_logits = torch.argmax(intent_logits, dim=1)
-    # slot_logits = torch.argmax(slot_logits, dim=2)
+    intent_logits, slot_logits = model(input_ids, attention_mask)
+    # intent_loss = intent_loss_fn(intent_logits, intent_labels)
+    # slot_loss = slot_loss_fn(
+        # slot_logits.view(-1, tokenizer.slot_len), slot_labels.view(-1)
+    # )
 
-    # print(f"intent_logits: {intent_logits}")
-    # print(f"intent_labels: {intent_labels}")
-    # print(f"slot_logits: {slot_logits}")
-    # print(f"slot_labels: {slot_labels}")
+    # loss = intent_loss + slot_loss
+    # print(f"Loss: {loss}")
+    # exit()
 
-    # print(f"intent_logits.shape: {intent_logits.shape}")
-    # print(f"intent_labels.shape: {intent_labels.shape}")
-    # print(f"slot_logits.shape: {slot_logits.shape}")
-    # print(f"slot_labels.shape: {slot_labels.shape}")
 
     # Losses
     loss = calculate_loss(
-        intent_loss_fn,
-        slot_loss_fn,
-        intent_logits,
-        slot_logits,
-        data['intent'],
-        data['slots'],
+        intent_loss_fn=intent_loss_fn,
+        intent_logits=intent_logits,
+        intent_labels=intent_labels,
+        slot_loss_fn=slot_loss_fn,
+        slot_logits=slot_logits,
+        slot_labels=slot_labels,
+        tokenizer=tokenizer,
     )
     # exit()
 
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
-    
+
     return loss.item()

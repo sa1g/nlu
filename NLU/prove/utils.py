@@ -133,6 +133,11 @@ class Tokenizer:
         self.slot_seq_id_2_bert_id = slot_seq_id_2_bert_id
         self.intent_seq_id_2_bert_id = intent_seq_id_2_bert_id
 
+        self.bert_id_2_slot_seq_id = {v: k for k, v in slot_seq_id_2_bert_id.items()}
+        self.bert_id_2_intent_seq_id = {
+            v: k for k, v in intent_seq_id_2_bert_id.items()
+        }
+
         self.slot_len = len(self.slot_seq_id_2_bert_id)
         self.intent_len = len(self.intent_seq_id_2_bert_id)
 
@@ -152,42 +157,6 @@ class Tokenizer:
             logging.debug("Test phrase: %s", phrase)
             logging.debug("Encoded phrase: %s", tokenized)
             logging.debug("Decoded phrase: %s", self.tokenizer.decode(tokenized))
-
-    def encode_utterance(self, utterance, padding="max_length", max_length=64):
-        return self.tokenizer(
-            utterance,
-            return_tensors="pt",
-            add_special_tokens=True,
-            padding=padding,
-            max_length=max_length,
-        )
-
-    def decode_utterance(self, utterance, padding="max_length", max_length=64):
-        return self.tokenizer.decode(utterance, padding=padding, max_length=max_length)
-
-    def encode_slots(self, slots, padding="max_length", max_length=64):
-        return self.tokenizer.encode(
-            slots,
-            return_tensors="pt",
-            add_special_tokens=False,
-            padding=padding,
-            max_length=max_length,
-        )
-
-    def decode_slots(self, slots, padding=True, max_length=64):
-        return self.tokenizer.decode(
-            slots, padding="max_length", skip_special_tokens=True
-        )
-
-    def encode_intent(self, intent):
-        return self.tokenizer.encode(
-            intent,
-            return_tensors="pt",
-            add_special_tokens=False,
-        )
-
-    def decode_intent(self, intent):
-        return self.tokenizer.decode(intent, skip_special_tokens=True)
 
     # def __call__(self, *args, **kwds):
     #     return self.tokenizer(*args, **kwds)
@@ -216,10 +185,6 @@ class MyDataset(Dataset):
         slots = self.slots[index]
         intent = self.intent[index]
 
-        # encoded_utterance = self.tokenizer.encode_utterance(utterance)
-        # encoded_slots = self.tokenizer.encode_slots(slots)
-        # encoded_intent = self.tokenizer.encode_intent(intent)
-
         # Tokenize inputs
         tmp_encoded_inputs = self.tokenizer.tokenizer(
             inputs,
@@ -234,7 +199,7 @@ class MyDataset(Dataset):
 
         tmp_encoded_slots = self.tokenizer.tokenizer(
             slots,
-            return_tensors="pt",
+            # return_tensors="pt",
             truncation=True,
             padding="max_length",
             max_length=64,
@@ -245,16 +210,24 @@ class MyDataset(Dataset):
 
         tmp_encoded_intent = self.tokenizer.tokenizer(
             intent,
-            return_tensors="pt",
+            # return_tensors="pt",
             add_special_tokens=False,
         )
 
-        encoded_intent = tmp_encoded_intent["input_ids"].squeeze(1)
+        encoded_intent = tmp_encoded_intent["input_ids"]
 
         encoded_input_ids = encoded_input_ids.squeeze(0).to(self.device)
         encoded_attention_mask = encoded_attention_mask.squeeze(0).to(self.device)
+
+        # Keeping the same shape as encoded_intent remap valus with bert_id_2_intent_seq_id
+        encoded_intent = torch.tensor([self.tokenizer.bert_id_2_intent_seq_id[e] for e in encoded_intent])
+        encoded_slots = torch.tensor([self.tokenizer.bert_id_2_slot_seq_id[e] for e in encoded_slots])
+
+        # encoded_intent = encoded_intent.squeeze(1).to(self.device)
+        # encoded_slots = encoded_slots.squeeze(0).to(self.device)
         encoded_intent = encoded_intent.to(self.device)
-        encoded_slots = encoded_slots.squeeze(0).to(self.device)
+        encoded_slots = encoded_slots.to(self.device)
+
 
         # print(f"input_ids: {encoded_input_ids.shape}")
         # print(f"attention_mask: {encoded_attention_mask.shape}")
@@ -262,16 +235,19 @@ class MyDataset(Dataset):
         # print(f"slot_labels: {encoded_slots.shape}")
 
         # exit()
-        # input_ids: torch.Size([4480, 64])
-        # attention_mask: torch.Size([4480, 64])
-        # intent_labels: torch.Size([4480])
-        # slot_labels: torch.Size([4480, 64])
+        # input_ids: torch.Size([64])
+        # attention_mask: torch.Size([64])
+        # intent_labels: torch.Size([1])
+        # slot_labels: torch.Size([64])
 
         return encoded_input_ids, encoded_attention_mask, encoded_intent, encoded_slots
+
 
 def create_dataset(data: list, tokenizer: Tokenizer, device: str = "cpu"):
 
     dataset = MyDataset(data, tokenizer, device)
+
+    # TODO: maybe add collate function so that padding can be reduced/removed
     dataLoader = DataLoader(dataset, batch_size=64)
 
     return dataLoader
