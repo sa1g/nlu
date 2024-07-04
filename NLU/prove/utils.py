@@ -199,105 +199,147 @@ class Tokenizer:
     #     return getattr(self.tokenizer, name)
 
 
-# class MyDataset(Dataset):
-#     def __init__(self, data: list, tokenizer: Tokenizer, device: str = "cuda:0"):
-#         self.tokenizer = tokenizer
-#         self.utterance = [d["utterance"] for d in data]
-#         self.slots = [d["slots"] for d in data]
-#         self.intent = [d["intent"] for d in data]
+class MyDataset(Dataset):
+    def __init__(self, data: list, tokenizer: Tokenizer, device: str = "cuda:0"):
+        self.tokenizer = tokenizer
+        self.utterance = [d["utterance"] for d in data]
+        self.slots = [d["slots"] for d in data]
+        self.intent = [d["intent"] for d in data]
 
-#         self.device = device
+        self.device = device
 
-#     def __len__(self):
-#         return len(self.utterance)
+    def __len__(self):
+        return len(self.utterance)
 
-#     def __getitem__(self, index):
-#         utterance = self.utterance[index]
-#         slots = self.slots[index]
-#         intent = self.intent[index]
+    def __getitem__(self, index):
+        inputs = self.utterance[index]
+        slots = self.slots[index]
+        intent = self.intent[index]
 
-#         encoded_utterance = self.tokenizer.encode_utterance(utterance)
-#         encoded_slots = self.tokenizer.encode_slots(slots)
-#         encoded_intent = self.tokenizer.encode_intent(intent)
+        # encoded_utterance = self.tokenizer.encode_utterance(utterance)
+        # encoded_slots = self.tokenizer.encode_slots(slots)
+        # encoded_intent = self.tokenizer.encode_intent(intent)
 
-#         return {
-#             "input_ids": encoded_utterance["input_ids"].to(self.device),
-#             "attention_mask": encoded_utterance["attention_mask"].to(self.device),
-#             "token_type_ids": encoded_utterance["token_type_ids"].to(self.device),
-#             "slots": encoded_slots.to(self.device),
-#             "intent": encoded_intent.to(self.device),
-#         }
+        # Tokenize inputs
+        tmp_encoded_inputs = self.tokenizer.tokenizer(
+            inputs,
+            return_tensors="pt",
+            truncation=True,
+            padding="max_length",
+            max_length=64,
+        )
 
+        encoded_input_ids = tmp_encoded_inputs["input_ids"]
+        encoded_attention_mask = tmp_encoded_inputs["attention_mask"]
+
+        tmp_encoded_slots = self.tokenizer.tokenizer(
+            slots,
+            return_tensors="pt",
+            truncation=True,
+            padding="max_length",
+            max_length=64,
+            add_special_tokens=False,
+        )
+
+        encoded_slots = tmp_encoded_slots["input_ids"]
+
+        tmp_encoded_intent = self.tokenizer.tokenizer(
+            intent,
+            return_tensors="pt",
+            add_special_tokens=False,
+        )
+
+        encoded_intent = tmp_encoded_intent["input_ids"].squeeze(1)
+
+        encoded_input_ids = encoded_input_ids.squeeze(0).to(self.device)
+        encoded_attention_mask = encoded_attention_mask.squeeze(0).to(self.device)
+        encoded_intent = encoded_intent.to(self.device)
+        encoded_slots = encoded_slots.squeeze(0).to(self.device)
+
+        # print(f"input_ids: {encoded_input_ids.shape}")
+        # print(f"attention_mask: {encoded_attention_mask.shape}")
+        # print(f"intent_labels: {encoded_intent.shape}")
+        # print(f"slot_labels: {encoded_slots.shape}")
+
+        # exit()
+        # input_ids: torch.Size([4480, 64])
+        # attention_mask: torch.Size([4480, 64])
+        # intent_labels: torch.Size([4480])
+        # slot_labels: torch.Size([4480, 64])
+
+        return encoded_input_ids, encoded_attention_mask, encoded_intent, encoded_slots
 
 def create_dataset(data: list, tokenizer: Tokenizer, device: str = "cpu"):
-    inputs = [d["utterance"] for d in data]
-    slots = [d["slots"] for d in data]
-    intent = [d["intent"] for d in data]
+    # inputs = [d["utterance"] for d in data]
+    # slots = [d["slots"] for d in data]
+    # intent = [d["intent"] for d in data]
 
-    # inputs: what is the cost for these flights from baltimore to philadelphia
-    # slots: O O O O O O O O B-fromloc.city_name O B-toloc.city_name
-    # intent: airfare
-    # inputs: 4480
-    # slots: 4480
-    # intent: 4480
+    # # inputs: what is the cost for these flights from baltimore to philadelphia
+    # # slots: O O O O O O O O B-fromloc.city_name O B-toloc.city_name
+    # # intent: airfare
+    # # inputs: 4480
+    # # slots: 4480
+    # # intent: 4480
 
-    # print(f"inputs: {inputs[0]}")
-    # print(f"slots: {slots[0]}")
-    # print(f"intent: {intent[0]}")
+    # # print(f"inputs: {inputs[0]}")
+    # # print(f"slots: {slots[0]}")
+    # # print(f"intent: {intent[0]}")
 
-    # print(f"inputs: {len(inputs)}")
-    # print(f"slots: {len(slots)}")
-    # print(f"intent: {len(intent)}")
+    # # print(f"inputs: {len(inputs)}")
+    # # print(f"slots: {len(slots)}")
+    # # print(f"intent: {len(intent)}")
 
-    # Tokenize inputs
-    tmp_encoded_inputs = tokenizer.tokenizer(
-        inputs,
-        return_tensors="pt",
-        truncation=True,
-        padding="max_length",
-        max_length=64,
-    )
+    # # Tokenize inputs
+    # tmp_encoded_inputs = tokenizer.tokenizer(
+    #     inputs,
+    #     return_tensors="pt",
+    #     truncation=True,
+    #     padding="max_length",
+    #     max_length=64,
+    # )
 
-    encoded_input_ids = tmp_encoded_inputs["input_ids"]
-    encoded_attention_mask = tmp_encoded_inputs["attention_mask"]
+    # encoded_input_ids = tmp_encoded_inputs["input_ids"]
+    # encoded_attention_mask = tmp_encoded_inputs["attention_mask"]
 
-    tmp_encoded_slots = tokenizer.tokenizer(
-        slots,
-        return_tensors="pt",
-        truncation=True,
-        padding="max_length",
-        max_length=64,
-        add_special_tokens=False,
-    )
+    # tmp_encoded_slots = tokenizer.tokenizer(
+    #     slots,
+    #     return_tensors="pt",
+    #     truncation=True,
+    #     padding="max_length",
+    #     max_length=64,
+    #     add_special_tokens=False,
+    # )
 
-    encoded_slots = tmp_encoded_slots["input_ids"]
+    # encoded_slots = tmp_encoded_slots["input_ids"]
 
-    tmp_encoded_intent = tokenizer.tokenizer(
-        intent,
-        return_tensors="pt",
-        add_special_tokens=False,
-    )
+    # tmp_encoded_intent = tokenizer.tokenizer(
+    #     intent,
+    #     return_tensors="pt",
+    #     add_special_tokens=False,
+    # )
 
-    encoded_intent = tmp_encoded_intent["input_ids"].squeeze(1)
+    # encoded_intent = tmp_encoded_intent["input_ids"]
 
-    encoded_input_ids = encoded_input_ids.to(device)
-    encoded_attention_mask = encoded_attention_mask.to(device)
-    encoded_intent = encoded_intent.to(device)
-    encoded_slots = encoded_slots.to(device)
+    # encoded_input_ids = encoded_input_ids.to(device)
+    # encoded_attention_mask = encoded_attention_mask.to(device)
+    # encoded_intent = encoded_intent.to(device)
+    # encoded_slots = encoded_slots.to(device)
 
-    # print(f"input_ids: {encoded_input_ids.shape}")
-    # print(f"attention_mask: {encoded_attention_mask.shape}")
-    # print(f"intent_labels: {encoded_intent.shape}")
-    # print(f"slot_labels: {encoded_slots.shape}")
+    # # print(f"input_ids: {encoded_input_ids.shape}")
+    # # print(f"attention_mask: {encoded_attention_mask.shape}")
+    # # print(f"intent_labels: {encoded_intent.shape}")
+    # # print(f"slot_labels: {encoded_slots.shape}")
 
-    # input_ids: torch.Size([4480, 64])
-    # attention_mask: torch.Size([4480, 64])
-    # intent_labels: torch.Size([4480])
-    # slot_labels: torch.Size([4480, 64])
+    # # input_ids: torch.Size([4480, 64])
+    # # attention_mask: torch.Size([4480, 64])
+    # # intent_labels: torch.Size([4480])
+    # # slot_labels: torch.Size([4480, 64])
 
-    dataset = TensorDataset(
-        encoded_input_ids, encoded_attention_mask, encoded_intent, encoded_slots
-    )
+    # dataset = TensorDataset(
+    #     encoded_input_ids, encoded_attention_mask, encoded_intent, encoded_slots
+    # )
+
+    dataset = MyDataset(data, tokenizer, device)
     dataLoader = DataLoader(dataset, batch_size=64)
 
     return dataLoader

@@ -41,10 +41,7 @@ if __name__ == "__main__":
     train_raw, dev_raw, test_raw = get_data()
 
     tokenizer = Tokenizer(train_raw, dev_raw, test_raw)
-    # print(asd.encode("I-fare_basis_code O O hello airfare+flight_time ground_service", add_special_tokens=False))
-    # print(asd("I-fare_basis_code O O hello airfare+flight_time ground_service", add_special_tokens=False))
-
-
+    
     dataset = create_dataset(train_raw, tokenizer, device)
 
     bert_model = BertModel.from_pretrained("bert-base-uncased")
