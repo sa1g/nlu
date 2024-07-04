@@ -5,7 +5,7 @@ from model import IntentSlotModel
 from utils import get_data, Tokenizer, create_dataset
 from torch.utils.data import DataLoader
 from transformers import BertModel
-from functions import train_loop
+from functions import train_loop, eval_loop
 
 def custom_collate_fn(batch):
     def pad_sequence(sequences, padding_value=0):
@@ -42,7 +42,7 @@ if __name__ == "__main__":
 
     tokenizer = Tokenizer(train_raw, dev_raw, test_raw)
     
-    dataset = create_dataset(train_raw, tokenizer, device)
+    train_dataset = create_dataset(train_raw, tokenizer, device)
 
     bert_model = BertModel.from_pretrained("bert-base-uncased")
 
@@ -57,14 +57,19 @@ if __name__ == "__main__":
     intent_loss_fn = torch.nn.CrossEntropyLoss()
     slot_loss_fn = torch.nn.CrossEntropyLoss()
 
-    for batch in dataset:
+    for index, batch in enumerate(train_dataset):
         
         # input_ids, attention_mask, intent_labels, slot_labels = batch
         # intent_labels = intent_labels.squeeze(1)
 
         loss = train_loop(model, batch, optimizer, intent_loss_fn, slot_loss_fn, tokenizer)
-        print(f"Loss: {loss}")
+        print(f"Step: {index} - Loss: {loss}")
 
+        # if (index == 4):
+        #     # if (index % 5 == 0):
+        #     eval_loop(model, batch, intent_loss_fn, slot_loss_fn, tokenizer)
+
+        #     exit()
         # intent_logits, slot_logits = model(input_ids, attention_mask)
         # intent_loss = intent_loss_fn(intent_logits, intent_labels)
         # slot_loss = slot_loss_fn(
