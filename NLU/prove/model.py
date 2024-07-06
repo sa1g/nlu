@@ -5,7 +5,7 @@ class IntentSlotModel(nn.Module):
         super().__init__()
         self.bert = bert_model
 
-        self.bert.resize_token_embeddings(30665)
+        # self.bert.resize_token_embeddings(30665)
 
         self.intent_classifier = nn.Linear(
             bert_model.config.hidden_size, intent_len

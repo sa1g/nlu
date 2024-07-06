@@ -43,6 +43,8 @@ if __name__ == "__main__":
     tokenizer = Tokenizer(train_raw, dev_raw, test_raw)
     
     train_dataset = create_dataset(train_raw, tokenizer, device)
+    dev_dataset = create_dataset(dev_raw, tokenizer, device)
+    test_dataset = create_dataset(test_raw, tokenizer, device)
 
     bert_model = BertModel.from_pretrained("bert-base-uncased")
 
@@ -65,11 +67,11 @@ if __name__ == "__main__":
         loss = train_loop(model, batch, optimizer, intent_loss_fn, slot_loss_fn, tokenizer)
         print(f"Step: {index} - Loss: {loss}")
 
-        # if (index == 4):
-        #     # if (index % 5 == 0):
-        #     eval_loop(model, batch, intent_loss_fn, slot_loss_fn, tokenizer)
+        if (index % 50 == 0 and index != 0):
+            # if (index % 5 == 0):
+            eval_loop(model, dev_dataset, intent_loss_fn, slot_loss_fn, tokenizer)
 
-        #     exit()
+            # exit()
         # intent_logits, slot_logits = model(input_ids, attention_mask)
         # intent_loss = intent_loss_fn(intent_logits, intent_labels)
         # slot_loss = slot_loss_fn(

@@ -116,7 +116,7 @@ class Tokenizer:
             if len(tokenized) > 1:
                 self.tokenizer.add_tokens([intention])
 
-        """ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA """
+        # """ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA """
 
         slot_seq_id_2_bert_id = {0: 0}
         for slot in slots_set:
@@ -144,19 +144,55 @@ class Tokenizer:
         logging.info("Unique slots: %d", self.slot_len)
         logging.info("Unique intents: %d", self.intent_len)
 
-        """ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA """
+        # """ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA """
 
-        logging.debug(
-            "After adding new tokens to the tokenizer: %i",
-            len(self.tokenizer.get_vocab()),
+        self.bertId_to_seqId = {0: 0}
+        self.seqId2bertId = {0: 0}
+
+        for phrases in [train_raw, dev_raw, test_raw]:
+            for phrase in phrases:
+                ids = self.tokenizer.encode(phrase["utterance"])
+
+                for id in ids:
+                    if id not in self.bertId_to_seqId:
+                        self.bertId_to_seqId[id] = len(self.bertId_to_seqId) + 1
+                        self.seqId2bertId[len(self.seqId2bertId) + 1] = id
+
+        # Create a map of token-bertId to a token-remappedId to reduce the number of tokens to the only used ones
+
+        # logging.debug(
+        #     "After adding new tokens to the tokenizer: %i",
+        #     len(self.tokenizer.get_vocab()),
+        # )
+
+        # if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
+        #     phrase = "I-fare_basis_code O O hello airfare+flight_time ground_service"
+        #     tokenized = self.tokenizer.encode(phrase, add_special_tokens=False)
+        #     logging.debug("Test phrase: %s", phrase)
+        #     logging.debug("Encoded phrase: %s", tokenized)
+        #     logging.debug("Decoded phrase: %s", self.tokenizer.decode(tokenized))
+
+    def encode_utterance(self, utterance: list[str]):
+        """
+        Encode the utterance into the bertId_to_seqId
+        """
+        tokenized = self.tokenizer(
+            utterance, truncation=True, padding="max_length", max_length=64
         )
+        encoded = [self.bertId_to_seqId[e] for e in tokenized['input_ids']]
 
-        if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
-            phrase = "I-fare_basis_code O O hello airfare+flight_time ground_service"
-            tokenized = self.tokenizer.encode(phrase, add_special_tokens=False)
-            logging.debug("Test phrase: %s", phrase)
-            logging.debug("Encoded phrase: %s", tokenized)
-            logging.debug("Decoded phrase: %s", self.tokenizer.decode(tokenized))
+        return {"input_ids": torch.tensor(encoded), "attention_mask": torch.tensor(tokenized["attention_mask"])}
+
+    def decode_utterance(self, utterance: list[str]):
+        """
+        Decode the utterance from the bertId_to_seqId
+        """
+        # decoded = [[self.seqId2bertId[e] for e in token] for token in utterance]
+        # return self.__tokenizer.decode(decoded)
+
+        ids = [self.seqId2bertId[e] for e in utterance]
+        decoded = self.tokenizer.convert_ids_to_tokens(ids) 
+        return decoded
 
     # def __call__(self, *args, **kwds):
     #     return self.tokenizer(*args, **kwds)
@@ -186,13 +222,15 @@ class MyDataset(Dataset):
         intent = self.intent[index]
 
         # Tokenize inputs
-        tmp_encoded_inputs = self.tokenizer.tokenizer(
-            inputs,
-            return_tensors="pt",
-            truncation=True,
-            padding="max_length",
-            max_length=64,
-        )
+        # tmp_encoded_inputs = self.tokenizer.__tokenizer(
+        #     inputs,
+        #     return_tensors="pt",
+        #     truncation=True,
+        #     padding="max_length",
+        #     max_length=64,
+        # )
+
+        tmp_encoded_inputs = self.tokenizer.encode_utterance(inputs)
 
         encoded_input_ids = tmp_encoded_inputs["input_ids"]
         encoded_attention_mask = tmp_encoded_inputs["attention_mask"]
@@ -220,14 +258,17 @@ class MyDataset(Dataset):
         encoded_attention_mask = encoded_attention_mask.squeeze(0).to(self.device)
 
         # Keeping the same shape as encoded_intent remap valus with bert_id_2_intent_seq_id
-        encoded_intent = torch.tensor([self.tokenizer.bert_id_2_intent_seq_id[e] for e in encoded_intent])
-        encoded_slots = torch.tensor([self.tokenizer.bert_id_2_slot_seq_id[e] for e in encoded_slots])
+        encoded_intent = torch.tensor(
+            [self.tokenizer.bert_id_2_intent_seq_id[e] for e in encoded_intent]
+        )
+        encoded_slots = torch.tensor(
+            [self.tokenizer.bert_id_2_slot_seq_id[e] for e in encoded_slots]
+        )
 
         # encoded_intent = encoded_intent.squeeze(1).to(self.device)
         # encoded_slots = encoded_slots.squeeze(0).to(self.device)
         encoded_intent = encoded_intent.to(self.device)
         encoded_slots = encoded_slots.to(self.device)
-
 
         # print(f"input_ids: {encoded_input_ids.shape}")
         # print(f"attention_mask: {encoded_attention_mask.shape}")
@@ -248,6 +289,6 @@ def create_dataset(data: list, tokenizer: Tokenizer, device: str = "cpu"):
     dataset = MyDataset(data, tokenizer, device)
 
     # TODO: maybe add collate function so that padding can be reduced/removed
-    dataLoader = DataLoader(dataset, batch_size=64)
+    dataLoader = DataLoader(dataset, batch_size=32)
 
     return dataLoader

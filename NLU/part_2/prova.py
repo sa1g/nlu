@@ -303,12 +303,6 @@ if __name__ == "__main__":
         # Forward
         intent_logits, slot_logits = model(input_ids, attention_mask)
 
-        print(intent_logits.shape)
-        print(intent_labels.shape)
-        print(slot_logits.shape)
-        print(slot_labels.shape)
-        exit()
-
         # intent_logits = torch.argmax(intent_logits, dim=1)
         # slot_logits = torch.argmax(slot_logits, dim=2)
 
@@ -362,8 +356,8 @@ if __name__ == "__main__":
                 ).item()
             )
 
-            intent_p = torch.argmax(intent_logits, dim=1)
-            slot_p = torch.argmax(slot_logits, dim=2)
+            intent_hyp = torch.argmax(intent_logits, dim=1)
+            slot_hyp = torch.argmax(slot_logits, dim=2)
 
             print("========== EVAL ===========")
             # print(f"intent_p: {intent_p[0]}")
@@ -379,10 +373,27 @@ if __name__ == "__main__":
             # Intention reference
             accuracy_intention = classification_report(
                 intent_labels.to("cpu"),
-                intent_p.to("cpu"),
+                intent_hyp.to("cpu"),
                 output_dict=True,
                 zero_division=False,
             )
+
+            # if slot_labels.shape != slot_hyp.shape:
+            #     print("Shape mismatch")
+            #     print(slot_labels.shape)
+            #     print(slot_hyp.shape)
+            #     exit()
+
+            # for i, (s_ref, s_hyp) in enumerate(zip(slot_labels, slot_hyp)):
+            #     tmp_ref = []
+            #     tmp_hyp = []
+
+            #     for j, (r,h) in enumerate(zip(s_ref, s_hyp)):
+            #         tmp_ref.append((j, r))
+            #         tmp_hyp.append((j, h))
+
+            #         print(f"Slot: {j} - Ref: {r} - Hyp: {h}")
+            #     exit()
 
             # DEBUG:Ref: [('i', 'O'), ('need', 'O'), ('to', 'O'), ('fly', 'O'), ('from', 'O'), ('washington', 'B-fromloc.city_name'), ('to', 'O'), ('san', 'B-toloc.city_name'), ('francisco', 'I-toloc.city_name'), ('but', 'O'), ('i', 'O'), ("'d", 'O'), ('like', 'O'), ('to', 'O'), ('stop', 'O'), ('over', 'O'), ('at', 'O'), ('dallas', 'B-stoploc.city_name'), ('can', 'O'), ('you', 'O'), ('tell', 'O'), ('me', 'O'), ('a', 'O'), ('schedule', 'B-flight_time'), ('of', 'O'), ('flights', 'O'), ('that', 'O'), ('will', 'O'), ('do', 'O'), ('that', 'O')]
             # DEBUG:Hyp: [('i', 'O'), ('need', 'O'), ('to', 'O'), ('fly', 'O'), ('from', 'O'), ('washington', 'O'), ('to', 'O'), ('san', 'B-toloc.city_name'), ('francisco', 'I-toloc.city_name'), ('but', 'B-toloc.city_name'), ('i', 'O'), ("'d", 'O'), ('like', 'O'), ('to', 'O'), ('stop', 'B-toloc.city_name'), ('over', 'B-flight_number'), ('at', 'O'), ('dallas', 'B-fromloc.airport_name'), ('can', 'B-economy'), ('you', 'I-round_trip'), ('tell', 'B-or'), ('me', 'O'), ('a', 'O'), ('schedule', 'O'), ('of', 'O'), ('flights', 'O'), ('that', 'O'), ('will', 'O'), ('do', 'B-depart_time.start_time'), ('that', 'B-depart_time.start_time')]
@@ -391,7 +402,7 @@ if __name__ == "__main__":
             # TODO: understand hoow to make it work AAAAAaaaAAAAaaAAAAaaaAA
 
             slot_ref = slot_labels.to("cpu").tolist()
-            slot_hyp = slot_p.to("cpu").tolist()
+            slot_hyp = slot_hyp.to("cpu").tolist()
 
             # ref: Any,
             # hyp: Any,
@@ -415,50 +426,50 @@ if __name__ == "__main__":
             
             exit()
 
-            for i, labels in enumerate(slot_ref):
-                raw_input = tokenizer.decode(
-                    input_ids[i], skip_special_tokens=False
-                ).split()
-                tmp = []
+            # for i, labels in enumerate(slot_ref):
+            #     raw_input = tokenizer.decode(
+            #         input_ids[i], skip_special_tokens=False
+            #     ).split()
+            #     tmp = []
 
-                # print("RAW INPUT: ", len(raw_input))
-                # print("LABELS: ", len(labels))
+            #     # print("RAW INPUT: ", len(raw_input))
+            #     # print("LABELS: ", len(labels))
 
-                if len(raw_input) != len(labels):
-                    print(raw_input)
-                    exit()
+            #     if len(raw_input) != len(labels):
+            #         print(raw_input)
+            #         exit()
 
-                for j, label in enumerate(labels):
-                    #     tmp.append( (f"{raw_input[j]}", f"{label}"))
-                    tmp.append((f"{raw_input[j]}", f"{slot_id2word[label]}"))
+            #     for j, label in enumerate(labels):
+            #         #     tmp.append( (f"{raw_input[j]}", f"{label}"))
+            #         tmp.append((f"{raw_input[j]}", f"{slot_id2word[label]}"))
 
-                    # print(f"{raw_input[j]}:: {slot_id2word[label]}")
+            #         # print(f"{raw_input[j]}:: {slot_id2word[label]}")
 
-                ref.append(tmp)
+            #     ref.append(tmp)
 
-            for i, labels in enumerate(slot_hyp):
-                raw_input = tokenizer.decode(
-                    input_ids[i], skip_special_tokens=False
-                ).split()
-                tmp = []
-                for label in labels:
-                    # tmp.append( (f"{slot_id2label[label]}", f"{label}"))
-                    tmp.append((f"{raw_input[j]}", f"{slot_id2word[label]}"))
-                hyp.append(tmp)
+            # for i, labels in enumerate(slot_hyp):
+            #     raw_input = tokenizer.decode(
+            #         input_ids[i], skip_special_tokens=False
+            #     ).split()
+            #     tmp = []
+            #     for label in labels:
+            #         # tmp.append( (f"{slot_id2label[label]}", f"{label}"))
+            #         tmp.append((f"{raw_input[j]}", f"{slot_id2word[label]}"))
+            #     hyp.append(tmp)
 
-            # print(ref[0])
-            # print(hyp[0])
-            # exit()
+            # # print(ref[0])
+            # # print(hyp[0])
+            # # exit()
 
-            # ref = [[('i', 'O'), ('need', 'O'), ('to', 'O'), ('fly', 'O'), ('from', 'O'), ('washington', 'B-fromloc.city_name'), ('to', 'O'), ('san', 'B-toloc.city_name'), ('francisco', 'I-toloc.city_name'), ('but', 'O'), ('i', 'O'), ("'d", 'O'), ('like', 'O'), ('to', 'O'), ('stop', 'O'), ('over', 'O'), ('at', 'O'), ('dallas', 'B-stoploc.city_name'), ('can', 'O'), ('you', 'O'), ('tell', 'O'), ('me', 'O'), ('a', 'O'), ('schedule', 'B-flight_time'), ('of', 'O'), ('flights', 'O'), ('that', 'O'), ('will', 'O'), ('do', 'O'), ('that', 'O')]]
-            # hyp = [[('i', 'O'), ('need', 'O'), ('to', 'O'), ('fly', 'O'), ('from', 'O'), ('washington', 'O'), ('to', 'O'), ('san', 'B-toloc.city_name'), ('francisco', 'I-toloc.city_name'), ('but', 'B-toloc.city_name'), ('i', 'O'), ("'d", 'O'), ('like', 'O'), ('to', 'O'), ('stop', 'B-toloc.city_name'), ('over', 'B-flight_number'), ('at', 'O'), ('dallas', 'B-fromloc.airport_name'), ('can', 'B-economy'), ('you', 'I-round_trip'), ('tell', 'B-or'), ('me', 'O'), ('a', 'O'), ('schedule', 'O'), ('of', 'O'), ('flights', 'O'), ('that', 'O'), ('will', 'O'), ('do', 'B-depart_time.start_time'), ('that', 'B-depart_time.start_time')]]
+            # # ref = [[('i', 'O'), ('need', 'O'), ('to', 'O'), ('fly', 'O'), ('from', 'O'), ('washington', 'B-fromloc.city_name'), ('to', 'O'), ('san', 'B-toloc.city_name'), ('francisco', 'I-toloc.city_name'), ('but', 'O'), ('i', 'O'), ("'d", 'O'), ('like', 'O'), ('to', 'O'), ('stop', 'O'), ('over', 'O'), ('at', 'O'), ('dallas', 'B-stoploc.city_name'), ('can', 'O'), ('you', 'O'), ('tell', 'O'), ('me', 'O'), ('a', 'O'), ('schedule', 'B-flight_time'), ('of', 'O'), ('flights', 'O'), ('that', 'O'), ('will', 'O'), ('do', 'O'), ('that', 'O')]]
+            # # hyp = [[('i', 'O'), ('need', 'O'), ('to', 'O'), ('fly', 'O'), ('from', 'O'), ('washington', 'O'), ('to', 'O'), ('san', 'B-toloc.city_name'), ('francisco', 'I-toloc.city_name'), ('but', 'B-toloc.city_name'), ('i', 'O'), ("'d", 'O'), ('like', 'O'), ('to', 'O'), ('stop', 'B-toloc.city_name'), ('over', 'B-flight_number'), ('at', 'O'), ('dallas', 'B-fromloc.airport_name'), ('can', 'B-economy'), ('you', 'I-round_trip'), ('tell', 'B-or'), ('me', 'O'), ('a', 'O'), ('schedule', 'O'), ('of', 'O'), ('flights', 'O'), ('that', 'O'), ('will', 'O'), ('do', 'B-depart_time.start_time'), ('that', 'B-depart_time.start_time')]]
 
-            # [('O', '18'), ('O', '18'), ('O', '18'), ('O', '18'), ('O', '18'), ('O', '18'), ('O', '18'), ('O', '18'), ('B-fromloc.city_name', '15'), ('O', '18'), ('B-toloc.city_name', '72'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0')]
-            # [('[PAD]', '0'), ('[PAD]', '0'), ('B-flight_time', '126'), ('I-flight_mod', '6'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('I-depart_time.period_of_day', '115'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0')]
+            # # [('O', '18'), ('O', '18'), ('O', '18'), ('O', '18'), ('O', '18'), ('O', '18'), ('O', '18'), ('O', '18'), ('B-fromloc.city_name', '15'), ('O', '18'), ('B-toloc.city_name', '72'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0')]
+            # # [('[PAD]', '0'), ('[PAD]', '0'), ('B-flight_time', '126'), ('I-flight_mod', '6'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('I-depart_time.period_of_day', '115'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0'), ('[PAD]', '0')]
 
-            # try:
-            f1_slot = evaluate(ref[0], hyp[0])
-            print(f1_slot)
+            # # try:
+            # f1_slot = evaluate(ref[0], hyp[0])
+            # print(f1_slot)
             # except Exception as ex:
             # print("Error: ", ex)
             # exit()
@@ -474,7 +485,8 @@ if __name__ == "__main__":
         for index, batch in enumerate(train_dataloader):
             loss = train_loop(model, batch, optimizer, intent_loss_fn, slot_loss_fn)
 
-            # if index % 5 == 0:
-            #     eval_loop(model, batch, intent_loss_fn, slot_loss_fn, tokenizer)
+            # if index % 5 == 0 and index != 0:
+            if index == 50:
+                eval_loop(model, batch, intent_loss_fn, slot_loss_fn, tokenizer)
 
             print(f"Epoch: {epoch}, Loss: {loss :.4f}")
