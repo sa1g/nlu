@@ -100,6 +100,7 @@ class Tokenizer:
         """
         # as suggested here: https://stackoverflow.com/questions/62082938/how-to-stop-bert-from-breaking-apart-specific-words-into-word-piece
         self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        self.tokenizer_in = BertTokenizer.from_pretrained("bert-base-uncased")
 
         logging.debug(
             "Before adding new tokens to the tokenizer: %i",
@@ -146,17 +147,17 @@ class Tokenizer:
 
         # """ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA """
 
-        self.bertId_to_seqId = {0: 0}
-        self.seqId2bertId = {0: 0}
+        # self.bertId_to_seqId = {0: 0}
+        # self.seqId2bertId = {0: 0}
 
-        for phrases in [train_raw, dev_raw, test_raw]:
-            for phrase in phrases:
-                ids = self.tokenizer.encode(phrase["utterance"])
+        # for phrases in [train_raw, dev_raw, test_raw]:
+        #     for phrase in phrases:
+        #         ids = self.tokenizer.encode(phrase["utterance"])
 
-                for id in ids:
-                    if id not in self.bertId_to_seqId:
-                        self.bertId_to_seqId[id] = len(self.bertId_to_seqId) + 1
-                        self.seqId2bertId[len(self.seqId2bertId) + 1] = id
+        #         for id in ids:
+        #             if id not in self.bertId_to_seqId:
+        #                 self.bertId_to_seqId[id] = len(self.bertId_to_seqId) + 1
+        #                 self.seqId2bertId[len(self.seqId2bertId) + 1] = id
 
         # Create a map of token-bertId to a token-remappedId to reduce the number of tokens to the only used ones
 
@@ -176,12 +177,14 @@ class Tokenizer:
         """
         Encode the utterance into the bertId_to_seqId
         """
-        tokenized = self.tokenizer(
-            utterance, truncation=True, padding="max_length", max_length=64
-        )
-        encoded = [self.bertId_to_seqId[e] for e in tokenized['input_ids']]
+        # tokenized = self.tokenizer(
+        #     utterance, truncation=True, padding="max_length", max_length=64
+        # )
+        # encoded = [self.bertId_to_seqId[e] for e in tokenized['input_ids']]
 
-        return {"input_ids": torch.tensor(encoded), "attention_mask": torch.tensor(tokenized["attention_mask"])}
+        # return {"input_ids": torch.tensor(encoded), "attention_mask": torch.tensor(tokenized["attention_mask"])}
+
+        return self.tokenizer_in(utterance, truncation=True, padding="max_length", max_length=64, return_tensors="pt")
 
     def decode_utterance(self, utterance: list[str]):
         """
@@ -190,8 +193,10 @@ class Tokenizer:
         # decoded = [[self.seqId2bertId[e] for e in token] for token in utterance]
         # return self.__tokenizer.decode(decoded)
 
-        ids = [self.seqId2bertId[e] for e in utterance]
-        decoded = self.tokenizer.convert_ids_to_tokens(ids) 
+        # ids = [self.seqId2bertId[e] for e in utterance]
+        # decoded = self.tokenizer.convert_ids_to_tokens(ids)
+        # 
+        decoded = self.tokenizer_in.decode(utterance) 
         return decoded
 
     # def __call__(self, *args, **kwds):
