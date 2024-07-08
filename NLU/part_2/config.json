@@ -5,6 +5,40 @@
         "test_batch_size": 32,
         "grad_clip": true,
         "scheduler": true
-
+    },
+    "sch_32": {
+        "train_batch_size": 32,
+        "dev_batch_size": 32,
+        "test_batch_size": 32,
+        "grad_clip": false,
+        "scheduler": true
+    },
+    "grad_32": {
+        "train_batch_size": 32,
+        "dev_batch_size": 32,
+        "test_batch_size": 32,
+        "grad_clip": true,
+        "scheduler": false
+    },
+    "sch_grad_64": {
+        "train_batch_size": 64,
+        "dev_batch_size": 64,
+        "test_batch_size": 64,
+        "grad_clip": true,
+        "scheduler": true
+    },
+    "sch_64": {
+        "train_batch_size": 64,
+        "dev_batch_size": 64,
+        "test_batch_size": 64,
+        "grad_clip": false,
+        "scheduler": true
+    },
+    "grad_64": {
+        "train_batch_size": 64,
+        "dev_batch_size": 64,
+        "test_batch_size": 64,
+        "grad_clip": true,
+        "scheduler": false
     }
 }

@@ -206,16 +206,6 @@ def main(config: dict):
     }
     torch.save(saving_object, PATH)
 
-    plt.figure(num=3, figsize=(8, 5)).patch.set_facecolor("white")
-    plt.title("Train and Dev Losses")
-    plt.ylabel("Loss")
-    plt.xlabel("Epochs")
-    plt.plot(avg_loss_train, label="Train loss")
-    plt.plot(avg_loss_dev, label="Dev loss")
-    plt.legend()
-    plt.show()
-
-
 if __name__ == "__main__":
     args = parser.parse_args()
     config: dict = load_config(args.c)

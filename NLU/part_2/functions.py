@@ -12,6 +12,82 @@ def calculate_loss(
 
     return intent_loss + slot_loss
 
+# def eval_loop(
+#     model: IntentSlotModel,
+#     dataloader,
+#     intent_loss_fn,
+#     slot_loss_fn,
+#     tokenizer, id2slots, slots2id
+# ):
+
+#     model.eval()
+#     total_loss = []
+
+#     ref_intents = []
+#     hyp_intents = []
+
+#     ref_slots = []
+#     hyp_slots = []
+
+#     with torch.no_grad():
+#         for data in dataloader:
+#             # input_ids, attention_mask, intent_labels, slot_labels = data
+#             # intent_labels = intent_labels.squeeze(1)
+
+#             # Forward
+#             intent_logits, slot_logits = model(data["input_ids"], data["attention_mask"], data["token_type_ids"])
+#             total_loss.append(
+#                 calculate_loss(
+#                     intent_loss_fn=intent_loss_fn,
+#                     intent_logits=intent_logits,
+#                     intent_labels=data["intent"],
+#                     slot_loss_fn=slot_loss_fn,
+#                     slot_logits=slot_logits,
+#                     slot_labels=data["slots"],
+#                     slots2id=slots2id
+#                 ).item()
+#             )
+
+#             intent_hyp = torch.argmax(intent_logits, dim=1)
+#             slot_hyp = torch.argmax(slot_logits, dim=2)
+
+#             # Intent inference
+#             ref_intents.extend(data["intent"].to("cpu").tolist())
+#             hyp_intents.extend(intent_hyp.to("cpu").tolist())
+                    
+#             # Slot filling inference
+#             input_ids = data["input_ids"].to("cpu").tolist()
+#             if data["slots"].shape != slot_hyp.shape and data["slots"].shape != input_ids.shape:
+#                 print("Shape mismatch")
+#                 print(data["slots"].shape)
+#                 print(slot_hyp.shape)
+#                 print(input_ids.shape)
+#                 exit()
+
+#             for input, s_ref, s_hyp, seq_length in zip(input_ids, data["slots"], slot_hyp, data["slots_len"]):
+#                 tmp_ref = []
+#                 tmp_hyp = []
+
+#                 utterance = tokenizer.tokenize(tokenizer.decode(input, include_special_tokens=False))[:seq_length]
+
+#                 for u, r,h in zip(utterance, s_ref, s_hyp):
+#                     tmp_ref.append((u, f"{id2slots[r.item()]}"))
+#                     tmp_hyp.append((u, f"{id2slots[h.item()]}"))
+
+#                 ref_slots.append(tmp_ref)
+#                 hyp_slots.append(tmp_hyp)
+        
+#         f1_slot = evaluate(ref_slots, hyp_slots)
+
+#         accuracy_intention = classification_report(
+#                 ref_intents,
+#                 hyp_intents,
+#                 output_dict=True,
+#                 zero_division=False,
+#             )['accuracy']
+
+#         return accuracy_intention, f1_slot["total"]["f"], total_loss
+
 def eval_loop(
     model: IntentSlotModel,
     dataloader,
@@ -19,7 +95,6 @@ def eval_loop(
     slot_loss_fn,
     tokenizer, id2slots, slots2id
 ):
-
     model.eval()
     total_loss = []
 
@@ -31,63 +106,54 @@ def eval_loop(
 
     with torch.no_grad():
         for data in dataloader:
-            # input_ids, attention_mask, intent_labels, slot_labels = data
-            # intent_labels = intent_labels.squeeze(1)
+            input_ids = data["input_ids"]
+            attention_mask = data["attention_mask"]
+            token_type_ids = data["token_type_ids"]
+            intent_labels = data["intent"]
+            slot_labels = data["slots"]
+            slots_len = data["slots_len"]
 
-            # Forward
-            intent_logits, slot_logits = model(data["input_ids"], data["attention_mask"], data["token_type_ids"])
-            total_loss.append(
-                calculate_loss(
-                    intent_loss_fn=intent_loss_fn,
-                    intent_logits=intent_logits,
-                    intent_labels=data["intent"],
-                    slot_loss_fn=slot_loss_fn,
-                    slot_logits=slot_logits,
-                    slot_labels=data["slots"],
-                    slots2id=slots2id
-                ).item()
-            )
-
-            intent_hyp = torch.argmax(intent_logits, dim=1)
-            slot_hyp = torch.argmax(slot_logits, dim=2)
+            # Forward pass
+            intent_logits, slot_logits = model(input_ids, attention_mask, token_type_ids)
+            loss = calculate_loss(
+                intent_loss_fn=intent_loss_fn,
+                intent_logits=intent_logits,
+                intent_labels=intent_labels,
+                slot_loss_fn=slot_loss_fn,
+                slot_logits=slot_logits,
+                slot_labels=slot_labels,
+                slots2id=slots2id
+            ).item()
+            total_loss.append(loss)
 
             # Intent inference
-            ref_intents.extend(data["intent"].to("cpu").tolist())
-            hyp_intents.extend(intent_hyp.to("cpu").tolist())
-                    
+            intent_hyp = torch.argmax(intent_logits, dim=1)
+            ref_intents.extend(intent_labels.cpu().tolist())
+            hyp_intents.extend(intent_hyp.cpu().tolist())
+
             # Slot filling inference
-            input_ids = data["input_ids"].to("cpu").tolist()
-            if data["slots"].shape != slot_hyp.shape and data["slots"].shape != input_ids.shape:
-                print("Shape mismatch")
-                print(data["slots"].shape)
-                print(slot_hyp.shape)
-                print(input_ids.shape)
-                exit()
+            slot_hyp = torch.argmax(slot_logits, dim=2)
 
-            for input, s_ref, s_hyp, seq_length in zip(input_ids, data["slots"], slot_hyp, data["slots_len"]):
-                tmp_ref = []
-                tmp_hyp = []
+            for i in range(input_ids.size(0)):
+                seq_length = slots_len[i]
+                utterance = tokenizer.tokenize(tokenizer.decode(input_ids[i].cpu().tolist(), include_special_tokens=False))[:seq_length]
 
-                utterance = tokenizer.tokenize(tokenizer.decode(input, include_special_tokens=False))[:seq_length]
-
-                for u, r,h in zip(utterance, s_ref, s_hyp):
-                    tmp_ref.append((u, f"{id2slots[r.item()]}"))
-                    tmp_hyp.append((u, f"{id2slots[h.item()]}"))
+                tmp_ref = [(utterance[j], id2slots[slot_labels[i][j].item()]) for j in range(seq_length)]
+                tmp_hyp = [(utterance[j], id2slots[slot_hyp[i][j].item()]) for j in range(seq_length)]
 
                 ref_slots.append(tmp_ref)
                 hyp_slots.append(tmp_hyp)
-        
+
         f1_slot = evaluate(ref_slots, hyp_slots)
 
         accuracy_intention = classification_report(
-                ref_intents,
-                hyp_intents,
-                output_dict=True,
-                zero_division=False,
-            )['accuracy']
+            ref_intents,
+            hyp_intents,
+            output_dict=True,
+            zero_division=False,
+        )['accuracy']
 
         return accuracy_intention, f1_slot["total"]["f"], total_loss
-
 
 def train_loop(
     model: IntentSlotModel,
