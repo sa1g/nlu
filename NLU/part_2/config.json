@@ -1,14 +1,10 @@
 {
-    "baseline": {
-        "dataset_path": "../dataset/ATIS",
-        "train_batch_size": 64,
-        "dev_batch_size": 64,
-        "test_batch_size": 64,
-        "n_epochs": 2,
-        "clip": 5,
-        "patience":3,
-        "lr": 0.001,
-        "runs":1,
-        "emb_dropout":0
+    "sch_grad_32": {
+        "train_batch_size": 32,
+        "dev_batch_size": 32,
+        "test_batch_size": 32,
+        "grad_clip": true,
+        "scheduler": true
+
     }
 }
