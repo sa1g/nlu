@@ -98,10 +98,12 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
                     tmp_seq.append((utterance[id_el], lang.id2slot[elem]))
                 hyp_slots.append(tmp_seq)
     try:
+        print(ref_slots[:5])
+        print(hyp_slots[:5])
         results = evaluate(ref_slots, hyp_slots)
     except Exception as ex:
         # Sometimes the model predicts a class that is not in REF
-        logging.warning("Warning: %s", ex)
+        logging.warning("AAAAAAAAAAAAAAA \t\t\t Warning : %s", ex)
         ref_s = set([x[1] for x in ref_slots])
         hyp_s = set([x[1] for x in hyp_slots])
         logging.warning(hyp_s.difference(ref_s))
@@ -435,6 +437,8 @@ def train(
 
         all_losses_train.append(losses_train)
         all_losses_dev.append(losses_dev)
+
+        exit()
 
     # Pad lists to the same length
     all_losses_train = pad_list_of_lists(all_losses_train)

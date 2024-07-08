@@ -109,6 +109,7 @@ def conlleval(data, otag='O'):
 
 def parse_iob(t):
     m = re.match(r'^([^-]*)-(.*)$', t)
+    print(f"t: {t}, m: {m}")
     return m.groups() if m else (t, None)
 
 

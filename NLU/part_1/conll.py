@@ -11,10 +11,10 @@ def stats():
 
 
 def evaluate(ref, hyp, otag='O'):
-    logging.debug("Evaluation for NLTK")
-    logging.debug(f"Ref: {ref[0]}")
-    logging.debug(f"Hyp: {hyp[0]}")
-    exit()
+    # logging.debug("Evaluation for NLTK")
+    # logging.debug(f"Ref: {ref[0]}")
+    # logging.debug(f"Hyp: {hyp[0]}")
+    # exit()
     # evaluation for NLTK
     aligned = align_hyp(ref, hyp)
     return conlleval(aligned, otag=otag)
