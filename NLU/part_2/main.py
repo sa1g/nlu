@@ -40,10 +40,13 @@ def main(config: dict):
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     processed_train = preprocess_data(train_raw, tokenizer, slots2id, intent2id)
+    processed_test = preprocess_data(test_raw, tokenizer, slots2id, intent2id)
+    processed_dev = preprocess_data(dev_raw, tokenizer, slots2id, intent2id)
+
 
     train_dataset = ATISDataset(processed_train)
-    test_dataset = ATISDataset(processed_train)
-    dev_dataset = ATISDataset(processed_train)
+    test_dataset = ATISDataset(processed_test)
+    dev_dataset = ATISDataset(processed_dev)
 
     dev_dataloader = torch.utils.data.DataLoader(
         dev_dataset,
@@ -221,7 +224,7 @@ if __name__ == "__main__":
             "train_batch_size": config.get("train_batch_size", 64),
             "dev_batch_size": config.get("dev_batch_size", 64),
             "test_batch_size": config.get("test_batch_size", 64),
-            "runs": config.get("runs", 5),
+            "runs": config.get("runs", 1),
             "epochs": config.get("epochs", 6),
             "grad_clip": config.get("grad_clip", True),
             "scheduler": config.get("scheduler", True),

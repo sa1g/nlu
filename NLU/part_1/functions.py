@@ -98,8 +98,8 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
                     tmp_seq.append((utterance[id_el], lang.id2slot[elem]))
                 hyp_slots.append(tmp_seq)
     try:
-        print(ref_slots[:5])
-        print(hyp_slots[:5])
+        # print(ref_slots[:5])
+        # print(hyp_slots[:5])
         results = evaluate(ref_slots, hyp_slots)
     except Exception as ex:
         # Sometimes the model predicts a class that is not in REF
@@ -325,16 +325,16 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
 
 
 #     # Saving the model:
-#     PATH = f"bin/{best_model.name}.pt"
-#     saving_object = {
-#         "epoch": x,
-#         "model": model.state_dict(),
-#         "optimizer": optimizer.state_dict(),
-#         "w2id": w2id,
-#         "slot2id": slot2id,
-#         "intent2id": intent2id,
-#     }
-#     torch.save(saving_object, PATH)
+    # PATH = f"bin/{best_model.name}.pt"
+    # saving_object = {
+    #     "epoch": x,
+    #     "model": model.state_dict(),
+    #     "optimizer": optimizer.state_dict(),
+    #     "w2id": w2id,
+    #     "slot2id": slot2id,
+    #     "intent2id": intent2id,
+    # }
+    # torch.save(saving_object, PATH)
 
 #     plt.figure(num=3, figsize=(8, 5)).patch.set_facecolor("white")
 #     plt.title("Train and Dev Losses")
@@ -438,7 +438,7 @@ def train(
         all_losses_train.append(losses_train)
         all_losses_dev.append(losses_dev)
 
-        exit()
+        # exit()
 
     # Pad lists to the same length
     all_losses_train = pad_list_of_lists(all_losses_train)
@@ -482,12 +482,12 @@ def train(
     }
     torch.save(saving_object, PATH)
 
-    plt.figure(num=3, figsize=(8, 5)).patch.set_facecolor("white")
-    plt.title("Train and Dev Losses")
-    plt.ylabel("Loss")
-    plt.xlabel("Epochs")
-    plt.plot(sampled_epochs, losses_train, label="Train loss")
-    plt.plot(sampled_epochs, losses_dev, label="Dev loss")
-    plt.legend()
-    plt.show()
+    # plt.figure(num=3, figsize=(8, 5)).patch.set_facecolor("white")
+    # plt.title("Train and Dev Losses")
+    # plt.ylabel("Loss")
+    # plt.xlabel("Epochs")
+    # plt.plot(sampled_epochs, losses_train, label="Train loss")
+    # plt.plot(sampled_epochs, losses_dev, label="Dev loss")
+    # plt.legend()
+    # plt.show()
 
