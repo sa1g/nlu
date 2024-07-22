@@ -1,0 +1,23 @@
+{
+    "sch_grad_32": {
+        "train_batch_size": 32,
+        "dev_batch_size": 32,
+        "test_batch_size": 32,
+        "grad_clip": true,
+        "scheduler": true
+    },
+    "sch_32": {
+        "train_batch_size": 32,
+        "dev_batch_size": 32,
+        "test_batch_size": 32,
+        "grad_clip": false,
+        "scheduler": true
+    },
+    "grad_32": {
+        "train_batch_size": 32,
+        "dev_batch_size": 32,
+        "test_batch_size": 32,
+        "grad_clip": true,
+        "scheduler": false
+    }
+}

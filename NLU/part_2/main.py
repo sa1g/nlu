@@ -34,9 +34,7 @@ def load_config(config_file):
 
 
 def main(config: dict):
-    train_raw, dev_raw, test_raw, slots2id, id2slots, intent2id, id2intent = (
-        get_data_and_mapping()
-    )
+    train_raw, dev_raw, test_raw, slots2id, id2slots, intent2id, id2intent = get_data_and_mapping()
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     processed_train = preprocess_data(train_raw, tokenizer, slots2id, intent2id)
