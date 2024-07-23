@@ -206,6 +206,8 @@ def main(config: dict):
         "intent2id": intent2id,
     }
     torch.save(saving_object, PATH)
+    writer.close()
+
 
 if __name__ == "__main__":
     args = parser.parse_args()

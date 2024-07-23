@@ -24,7 +24,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-c", default="config.json", help="Config file json")
-logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.DEBUG)
+logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.CRITICAL)
 
 
 def load_config(config_file):
@@ -63,7 +63,7 @@ def main(config: dict):
         logging.debug(dataloader["attention_mask"].shape)
         logging.debug(dataloader["token_type_ids"].shape)
         logging.debug(dataloader["slots"].shape)
-        
+
         break
 
     name = config["name"]
@@ -144,6 +144,29 @@ def main(config: dict):
                 best_model = copy.deepcopy(model).to("cpu")
             # continue 160
 
+            writer.add_scalar("Loss/train", train_losses[-1], epoch)
+            writer.add_scalar("Loss/dev", dev_losses[-1], epoch)
+            writer.add_scalar("F1/dev", f1, epoch)
+            writer.add_scalar("Precision/dev", precision, epoch)
+            writer.add_scalar("Recall/dev", recall, epoch)
+
+        f1, precision, recall, loss = eval_loop(
+            model, test_dataloader, slot_loss_fn, tokenizer, id2slots, slots2id
+        )
+
+        writer.add_scalar("F1/test", f1, epoch)
+        writer.add_scalar("Precision/test", precision, epoch)
+        writer.add_scalar("Recall/test", recall, epoch)
+
+    PATH = f"bin/{name}.pt"
+    saving_object = {
+        "model": best_model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "slot2id": slots2id,
+    }
+    torch.save(saving_object, PATH)
+    writer.close()
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -160,7 +183,7 @@ if __name__ == "__main__":
             "train_batch_size": config.get("train_batch_size", 64),
             "dev_batch_size": config.get("dev_batch_size", 64),
             "test_batch_size": config.get("test_batch_size", 64),
-            "runs": config.get("runs", 1),
+            "runs": config.get("runs", 5),
             "epochs": config.get("epochs", 6),
             "grad_clip": config.get("grad_clip", True),
             "scheduler": config.get("scheduler", True),
