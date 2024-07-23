@@ -127,9 +127,9 @@ def get_model(config: dict, device) -> nn.Module:
     else:
         raise ValueError("Model not found")
     # elif config["model_type"] == "LM_LSTM_WS":
-        # model = LM_LSTM_WS(config).to(device)
+    # model = LM_LSTM_WS(config).to(device)
     # elif config["model_type"] == "LM_LSTM_VD":
-        # model = LM_LSTM_VD(config).to(device)
+    # model = LM_LSTM_VD(config).to(device)
 
     if init_weights:
         model.apply(config["init_weights"])
@@ -149,20 +149,8 @@ def get_optimizer(model: nn.Module, config: dict = {}):
             weight_decay=config["weight_decay"],
         )
     elif config["optim_name"] == "NTAvSGD":
-        # return optim.ASGD(
-        #     model.parameters(),
-        #     lr=1e-2,
-        #     t0=config.get("t0", 1e6),
-        #     weight_decay=0
-        # )
-        return NTAvSGD(
-            model.parameters(),
-            lr=config["lr"],
-            momentum=config["momentum"],
-            dampening=0,
-            weight_decay=config["weight_decay"],
-            nesterov=False,
-        )
+        rnn_modules = [module for module in model.modules() if isinstance(module, torch.nn.RNNBase)]
+        return NTAvSGD(model.parameters(), lr=config["lr"], rnn_modules=rnn_modules)
 
     SystemError()
 
@@ -178,7 +166,7 @@ def train(
     dev_loader: DataLoader,
     test_loader: DataLoader,
     device: str = "cpu",
-    patience: int = 5
+    patience: int = 5,
 ):
     """
     TODO: add docs
@@ -238,7 +226,8 @@ def train(
                     and len(losses_dev) > optimizer_config["non_monotonic_interval"]
                     and loss_dev
                     > min(losses_dev[: -optimizer_config["non_monotonic_interval"]])
-                    and optimizer_config["optim_name"] == "nmASGD"
+                    # and optimizer_config["optim_name"] == "nmASGD
+                    and optimizer_config["optim_name"] == "NTAvSGD"
                 )
                 or (epoch > 10)
             ) and (optimizer.is_triggered == False):
@@ -257,15 +246,26 @@ def train(
     torch.save(best_model.state_dict(), path)
 
 
+# class NTAvSGD(optim.SGD):
+#     def __init__(self, params, lr=1e-3):
+#         super().__init__(params, lr=lr)
+
+#     def step(self):
+#         super().step()
+
+#     def trigger():
+#         pass
+
 class NTAvSGD(optim.SGD):
     def __init__(
-        self, params, lr=1e-3, momentum=0, dampening=0, weight_decay=0, nesterov=False
+        self, params, lr=1e-3, momentum=0, dampening=0, weight_decay=0, nesterov=False, rnn_modules=None
     ):
         super(NTAvSGD, self).__init__(
             params, lr, momentum, dampening, weight_decay, nesterov
         )
-        self.avg_params = None
+        self.avg_params = []
         self.is_triggered = False
+        self.rnn_modules = rnn_modules or []
 
     def initialize_avg_params(self):
         self.avg_params = []
@@ -273,14 +273,14 @@ class NTAvSGD(optim.SGD):
             avg_group = {}
             for param in group["params"]:
                 if param.requires_grad:
-                    avg_group[param] = torch.clone(param.data).detach()
+                    avg_group[param] = param.clone().detach()
             self.avg_params.append(avg_group)
 
     def update_avg_params(self):
         for avg_group, group in zip(self.avg_params, self.param_groups):
             for param in group["params"]:
                 if param.requires_grad:
-                    avg_group[param].data.mul_(0.5).add_(param.data, alpha=0.5)
+                    avg_group[param].mul_(0.5).add_(param.data, alpha=0.5)
 
     def step(self, closure=None):
         loss = None
@@ -288,10 +288,10 @@ class NTAvSGD(optim.SGD):
             loss = closure()
 
         # Standard SGD step
-        super().step()
+        super().step(closure)
 
         # Initialize avg_params on first step
-        if self.avg_params is None:
+        if not self.avg_params:
             self.initialize_avg_params()
 
         # Update avg_params if triggered
@@ -304,20 +304,15 @@ class NTAvSGD(optim.SGD):
         self.is_triggered = state
 
     def swap_params_with_avg(self):
-        if self.avg_params is not None:
+        if self.avg_params:
             for avg_group, group in zip(self.avg_params, self.param_groups):
                 for param in group["params"]:
                     if param.requires_grad:
-                        param.data, avg_group[param].data = (
-                            avg_group[param].data,
-                            param.data,
-                        )
+                        param.data, avg_group[param] = avg_group[param], param.data
 
     def flatten_rnn_parameters(self):
-        for group in self.param_groups:
-            for param in group["params"]:
-                if isinstance(param, torch.nn.RNNBase):
-                    param.flatten_parameters()
+        for rnn_module in self.rnn_modules:
+            rnn_module.flatten_parameters()
 
     def state_dict(self):
         state_dict = super(NTAvSGD, self).state_dict()
@@ -335,3 +330,165 @@ class NTAvSGD(optim.SGD):
             {k: v.clone() for k, v in avg_group.items()} for avg_group in avg_params
         ]
         super(NTAvSGD, self).load_state_dict(state_dict)
+
+
+# class NTAvSGD(optim.SGD):
+#     def __init__(self, params, lr=1e-3):
+#         super().__init__(params, lr)
+#         self.avg_params = []
+#         self.is_triggered = False
+
+#     def initialize_avg_params(self):
+#         self.avg_params = []
+#         for group in self.param_groups:
+#             avg_group = {}
+#             for param in group["params"]:
+#                 if param.requires_grad:
+#                     avg_group[param] = param.clone().detach()
+#             self.avg_params.append(avg_group)
+
+#     def update_avg_params(self):
+#         for avg_group, group in zip(self.avg_params, self.param_groups):
+#             for param in group["params"]:
+#                 if param.requires_grad:
+#                     avg_group[param].mul_(0.5).add_(param.data, alpha=0.5)
+
+#     def step(self, closure=None):
+#         loss = None
+#         if closure is not None:
+#             loss = closure()
+
+#         # Standard SGD step
+#         super().step(closure)
+
+#         # Initialize avg_params on first step
+#         if not self.avg_params:
+#             self.initialize_avg_params()
+
+#         # Update avg_params if triggered
+#         if self.is_triggered:
+#             self.update_avg_params()
+#             self.swap_params_with_avg()
+#             self.flatten_rnn_parameters()
+
+#     def trigger(self, state=True):
+#         print("TRIGGERED")
+#         self.is_triggered = state
+
+#     def swap_params_with_avg(self):
+#         if self.avg_params:
+#             for avg_group, group in zip(self.avg_params, self.param_groups):
+#                 for param in group["params"]:
+#                     if param.requires_grad:
+#                         param.data, avg_group[param] = avg_group[param], param.data
+
+#     def flatten_rnn_parameters(self):
+#         for group in self.param_groups:
+#             for param in group["params"]:
+#                 if hasattr(
+#                     param, "grad_fn"
+#                 ):  # Check if the parameter has a gradient function
+#                     parent_module = (
+#                         param.grad_fn.next_functions[0][0]
+#                         .variable._grad_fn._saved_tensors[0]
+#                         .grad_fn.next_functions[0][0]
+#                     )
+#                     if isinstance(parent_module, torch.nn.RNNBase):
+#                         parent_module.flatten_parameters()
+
+#     def state_dict(self):
+#         state_dict = super(NTAvSGD, self).state_dict()
+#         state_dict["avg_params"] = [
+#             {k: v.clone() for k, v in avg_group.items()}
+#             for avg_group in self.avg_params
+#         ]
+#         state_dict["is_triggered"] = self.is_triggered
+#         return state_dict
+
+#     def load_state_dict(self, state_dict):
+#         self.is_triggered = state_dict.pop("is_triggered")
+#         avg_params = state_dict.pop("avg_params")
+#         self.avg_params = [
+#             {k: v.clone() for k, v in avg_group.items()} for avg_group in avg_params
+#         ]
+#         super(NTAvSGD, self).load_state_dict(state_dict)
+
+
+# class NTAvSGD(optim.SGD):
+#     def __init__(
+#         self, params, lr=1e-3, momentum=0, dampening=0, weight_decay=0, nesterov=False
+#     ):
+#         super(NTAvSGD, self).__init__(
+#             params, lr, momentum, dampening, weight_decay, nesterov
+#         )
+#         self.avg_params = None
+#         self.is_triggered = False
+
+#     def initialize_avg_params(self):
+#         self.avg_params = []
+#         for group in self.param_groups:
+#             avg_group = {}
+#             for param in group["params"]:
+#                 if param.requires_grad:
+#                     avg_group[param] = torch.clone(param.data).detach()
+#             self.avg_params.append(avg_group)
+
+#     def update_avg_params(self):
+#         for avg_group, group in zip(self.avg_params, self.param_groups):
+#             for param in group["params"]:
+#                 if param.requires_grad:
+#                     avg_group[param].data.mul_(0.5).add_(param.data, alpha=0.5)
+
+#     def step(self, closure=None):
+#         loss = None
+#         if closure is not None:
+#             loss = closure()
+
+#         # Standard SGD step
+#         super().step()
+
+#         # Initialize avg_params on first step
+#         if self.avg_params is None:
+#             self.initialize_avg_params()
+
+#         # Update avg_params if triggered
+#         if self.is_triggered:
+#             self.update_avg_params()
+#             self.swap_params_with_avg()
+#             self.flatten_rnn_parameters()
+
+#     def trigger(self, state=True):
+#         self.is_triggered = state
+
+#     def swap_params_with_avg(self):
+#         if self.avg_params is not None:
+#             for avg_group, group in zip(self.avg_params, self.param_groups):
+#                 for param in group["params"]:
+#                     if param.requires_grad:
+#                         param.data, avg_group[param].data = (
+#                             avg_group[param].data,
+#                             param.data,
+#                         )
+
+#     def flatten_rnn_parameters(self):
+#         for group in self.param_groups:
+#             for param in group["params"]:
+#                 if isinstance(param, torch.nn.RNNBase):
+#                     param.flatten_parameters()
+
+#     def state_dict(self):
+#         state_dict = super(NTAvSGD, self).state_dict()
+#         state_dict["avg_params"] = [
+#             {k: v.clone() for k, v in avg_group.items()}
+#             for avg_group in self.avg_params
+#         ]
+#         state_dict["is_triggered"] = self.is_triggered
+#         return state_dict
+
+#     def load_state_dict(self, state_dict):
+#         self.is_triggered = state_dict.pop("is_triggered")
+#         avg_params = state_dict.pop("avg_params")
+#         self.avg_params = [
+#             {k: v.clone() for k, v in avg_group.items()} for avg_group in avg_params
+#         ]
+#         super(NTAvSGD, self).load_state_dict(state_dict)

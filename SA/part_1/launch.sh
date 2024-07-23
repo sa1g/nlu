@@ -13,6 +13,7 @@
 
 #SBATCH --account=riccardi.edu
 
+
 echo "loading CUDA"
 module load cuda
 
@@ -21,7 +22,7 @@ source /home/ettore.saggiorato/miniconda3/bin/activate
 conda activate NLU
 
 echo "Training"
-cd /home/ettore.saggiorato/nlu/NLU/part_1/
+cd /home/ettore.saggiorato/nlu/SA/part_1/
 python3 main.py
 
 echo "Done"

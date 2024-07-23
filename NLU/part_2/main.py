@@ -76,8 +76,6 @@ def main(config: dict):
     best_model = None
     best_f1 = 0
 
-    slot_f1s, intent_acc, all_losses_train, all_losses_dev = [], [], [], []
-
     for _ in tqdm(range(config["runs"]), desc="Runs"):
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset,
@@ -149,6 +147,11 @@ def main(config: dict):
                 best_f1 = f1
                 best_model = copy.deepcopy(model).to("cpu")
 
+            writer.add_scalar("Loss/train", train_losses[-1], epoch)
+            writer.add_scalar("Loss/dev", dev_losses[-1], epoch)
+            writer.add_scalar("F1/dev", f1, epoch)
+            writer.add_scalar("Accuracy/dev", accuracy, epoch)
+
         accuracy, f1, loss = eval_loop(
             model,
             test_dataloader,
@@ -159,44 +162,14 @@ def main(config: dict):
             slots2id,
         )
 
-        intent_acc.append(accuracy)
-        slot_f1s.append(f1)
+        writer.add_scalar("F1/test", f1, epoch)
+        writer.add_scalar("Accuracy/test", accuracy, epoch)
+        writer.add_scalar("Loss/test", sum(loss) / len(loss), epoch)
 
-        all_losses_train.append(train_losses)
-        all_losses_dev.append(dev_losses)
 
         print(
             f"Accuracy: {accuracy:.4f} - F1: {f1:.4f} - Loss: {sum(loss)/len(loss):.4f}"
         )
-
-    avg_losses_train = np.mean(np.asarray(all_losses_train), axis=0)
-    avg_losses_dev = np.mean(np.asarray(all_losses_dev), axis=0)
-    std_losses_train = np.std(np.asarray(all_losses_train), axis=0)
-    std_losses_dev = np.std(np.asarray(all_losses_dev), axis=0)
-
-    slot_f1s = np.asarray(slot_f1s)
-    intent_acc = np.asarray(intent_acc)
-
-    for epoch, (
-        avg_loss_train,
-        std_loss_train,
-        avg_loss_dev,
-        std_loss_dev,
-    ) in enumerate(
-        zip(avg_losses_train, std_losses_train, avg_losses_dev, std_losses_dev)
-    ):
-        writer.add_scalar("Loss/Train_avg", avg_loss_train, epoch)
-        writer.add_scalar("Loss/Train_std", std_loss_train, epoch)
-        writer.add_scalar("Loss/Dev_avg", avg_loss_dev, epoch)
-        writer.add_scalar("Loss/Dev_std", std_loss_dev, epoch)
-
-    writer.add_scalar("Metrics/Slot_F1_avg", slot_f1s.mean())
-    writer.add_scalar("Metrics/Slot_F1_std", slot_f1s.std())
-    writer.add_scalar("Metrics/Intent_Acc_avg", intent_acc.mean())
-    writer.add_scalar("Metrics/Intent_Acc_std", intent_acc.std())
-
-    print("Slot F1", round(slot_f1s.mean(), 3), "+-", round(slot_f1s.std(), 3))
-    print("Intent Acc", round(intent_acc.mean(), 3), "+-", round(intent_acc.std(), 3))
 
     PATH = f"bin/{name}.pt"
     saving_object = {

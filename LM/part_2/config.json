@@ -1,20 +1,4 @@
 {
-
-    "NTAvSGD-lr001": {
-        "model_type": "LM_LSTM",
-        "dataset_path": "../dataset",
-        "train_batch_size": 64,
-        "dev_batch_size": 64,
-        "test_batch_size": 64,
-        "emb_size": 300,
-        "hid_size": 300,
-        "n_layers": 1,
-        "lr": 0.01,
-        "n_epochs": 10,
-        "clip": 5,
-        "optim_name": "NTAvSGD",
-        "weight_tying": true
-    },
     "NTAvSGD-lr1": {
         "model_type": "LM_LSTM",
         "dataset_path": "../dataset",
@@ -24,26 +8,11 @@
         "emb_size": 300,
         "hid_size": 300,
         "n_layers": 1,
-        "lr": 1,
-        "n_epochs": 10,
-        "clip": 5,
-        "optim_name": "NTAvSGD",
-        "weight_tying": true
-    },    
-    "NTAvSGD-lr2": {
-        "model_type": "LM_LSTM",
-        "dataset_path": "../dataset",
-        "train_batch_size": 64,
-        "dev_batch_size": 64,
-        "test_batch_size": 64,
-        "emb_size": 300,
-        "hid_size": 300,
-        "n_layers": 1,
         "lr": 2,
-        "n_epochs": 10,
+        "n_epochs": 30,
         "clip": 5,
         "optim_name": "NTAvSGD",
-        "weight_tying": true
+        "weight_tying": false
     }
 }
 
