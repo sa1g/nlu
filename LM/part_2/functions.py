@@ -117,10 +117,10 @@ def get_loaders_lang(
 
 
 def get_model(config: dict, device) -> nn.Module:
-    # if config["model_type"] == "LM_RNN":
-    #     logging.debug("LM_RNN")
-    #     model = LM_RNN(config).to(device)
-    if config["model_type"] == "LM_LSTM":
+    if config["model_type"] == "LM_RNN":
+        logging.debug("LM_RNN")
+        model = LM_RNN(config).to(device)
+    elif config["model_type"] == "LM_LSTM":
         logging.debug("LM_LSTM")
         model = LM_LSTM(config).to(device)
         # model = LM_RNN(config).to(device)
