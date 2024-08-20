@@ -1,0 +1,7 @@
+https://github.com/monologg/JointBERT/tree/master
+
+https://colab.research.google.com/github/ShawonAshraf/nlu-jointbert-dl2021/blob/main/notebooks/nlu_jointbert_dl21.ipynb#scrollTo=CZqMiC_gZM5s
+
+https://arxiv.org/pdf/1810.04805
+
+https://arxiv.org/pdf/1902.10909
