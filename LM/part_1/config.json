@@ -11,7 +11,7 @@
         "n_layers": 1,
         "lr": 1,
         "weight_decay": 0,
-        "n_epochs": 10,
+        "n_epochs": 100,
         "clip": 5,
         "optim_name": "SGD"
     },
@@ -26,7 +26,7 @@
         "n_layers": 1,
         "lr": 1,
         "weight_decay": 0,
-        "n_epochs": 10,
+        "n_epochs": 100,
         "clip": 5,
         "optim_name": "SGD"
     },
@@ -41,7 +41,7 @@
         "n_layers": 2,
         "lr": 1,
         "weight_decay": 0,
-        "n_epochs": 10,
+        "n_epochs": 100,
         "clip": 5,
         "optim_name": "SGD"
     },
@@ -56,7 +56,7 @@
         "n_layers": 1,
         "lr": 2,
         "weight_decay": 0,
-        "n_epochs": 10,
+        "n_epochs": 100,
         "clip": 5,
         "optim_name": "SGD"
     },
@@ -71,7 +71,7 @@
         "n_layers": 1,
         "lr": 3,
         "weight_decay": 0,
-        "n_epochs": 10,
+        "n_epochs": 100,
         "clip": 5,
         "optim_name": "SGD"
     },
@@ -86,7 +86,7 @@
         "n_layers": 1,
         "lr": 2,
         "weight_decay": 0,
-        "n_epochs": 10,
+        "n_epochs": 100,
         "clip": 5,
         "optim_name": "SGD"
     },
@@ -101,7 +101,7 @@
         "n_layers": 1,
         "lr": 2,
         "weight_decay": 0,
-        "n_epochs": 10,
+        "n_epochs": 100,
         "clip": 5,
         "optim_name": "SGD",
         "emb_dropout": 0.2
@@ -117,7 +117,7 @@
         "n_layers": 1,
         "lr": 2,
         "weight_decay": 0,
-        "n_epochs": 10,
+        "n_epochs": 100,
         "clip": 5,
         "optim_name": "SGD",
         "emb_dropout": 0.5
@@ -133,7 +133,7 @@
         "n_layers": 1,
         "lr": 2,
         "weight_decay": 0,
-        "n_epochs": 10,
+        "n_epochs": 100,
         "clip": 5,
         "optim_name": "SGD",
         "out_dropout": 0.2
@@ -149,7 +149,7 @@
         "n_layers": 1,
         "lr": 2,
         "weight_decay": 0,
-        "n_epochs": 10,
+        "n_epochs": 100,
         "clip": 5,
         "optim_name": "SGD",
         "out_dropout": 0.5
@@ -165,7 +165,7 @@
         "n_layers": 1,
         "lr": 2,
         "weight_decay": 0,
-        "n_epochs": 10,
+        "n_epochs": 100,
         "clip": 5,
         "optim_name": "SGD",
         "emb_dropout": 0.5,
@@ -182,7 +182,7 @@
         "n_layers": 1,
         "lr": 2,
         "weight_decay": 0,
-        "n_epochs": 10,
+        "n_epochs": 100,
         "clip": 5,
         "optim_name": "SGD",
         "emb_dropout": 0.2,
@@ -199,7 +199,7 @@
         "n_layers": 1,
         "lr": 0.001,
         "weight_decay": 0,
-        "n_epochs": 10,
+        "n_epochs": 100,
         "clip": 5,
         "optim_name": "AdamW"
     },
@@ -214,7 +214,7 @@
         "n_layers": 1,
         "lr": 0.002,
         "weight_decay": 0,
-        "n_epochs": 10,
+        "n_epochs": 100,
         "clip": 5,
         "optim_name": "AdamW"
     },
@@ -229,7 +229,7 @@
         "n_layers": 1,
         "lr": 0.001,
         "weight_decay": 0,
-        "n_epochs": 10,
+        "n_epochs": 100,
         "clip": 5,
         "optim_name": "AdamW"
     }

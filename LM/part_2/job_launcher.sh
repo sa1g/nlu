@@ -5,7 +5,7 @@
 #SBATCH --tasks=1
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=1
-#SBATCH --time=00:30:00
+#SBATCH --time=10:00:00
 
 #SBATCH --job-name=baseline
 #SBATCH --output=%j.out
@@ -19,7 +19,7 @@ source /home/ettore.saggiorato/miniconda3/bin/activate
 conda activate NLU
 
 echo "Training"
-cd /home/ettore.saggiorato/natural-language-understanding/LM/part_1/
+cd /home/ettore.saggiorato/natural-language-understanding/LM/part_2/
 python3 main.py
 
 echo "Done"
