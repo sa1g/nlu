@@ -15,15 +15,17 @@ def load_data(path):
 def split_sets(tmp_train_raw):
     portion = 0.10
 
-    intents = [x["intent"] for x in tmp_train_raw]  # We stratify on intents
+    # We stratify on intents
+    intents = [x["intent"] for x in tmp_train_raw]
     count_y = Counter(intents)
 
     labels = []
     inputs = []
     mini_train = []
 
+    # If some intents occurs only once, we put them in training
     for id_y, y in enumerate(intents):
-        if count_y[y] > 1:  # If some intents occurs only once, we put them in training
+        if count_y[y] > 1: 
             inputs.append(tmp_train_raw[id_y])
             labels.append(y)
         else:
@@ -91,7 +93,7 @@ def tokenize_and_preserve_labels(sentence, text_labels, tokenizer):
         n_subwords = len(tokenized_word)
 
         tokenized_sentence.extend(tokenized_word)
-        # labels.extend([label] + ["X"] * (n_subwords - 1))
+
         labels.extend([label] * n_subwords)
 
     return tokenized_sentence, labels

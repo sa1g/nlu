@@ -42,7 +42,7 @@ def main(train_config: dict, model_config: dict, optimizer_config: dict):
     logging.debug("Model done")
 
     # TENSORBOARD
-    writer: SummaryWriter = SummaryWriter(log_dir=f"log/{model.name}")
+    writer: SummaryWriter = SummaryWriter(log_dir=f"log/{model.name}-{optimizer_config['lr']}")
 
     # TRAINING
     train(

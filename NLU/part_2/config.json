@@ -40,5 +40,19 @@
         "test_batch_size": 64,
         "grad_clip": true,
         "scheduler": false
+    },
+    "32_simple": {
+        "train_batch_size": 32,
+        "dev_batch_size": 32,
+        "test_batch_size": 32,
+        "grad_clip": false,
+        "scheduler": false
+    },
+    "64_simple": {
+        "train_batch_size": 64,
+        "dev_batch_size": 64,
+        "test_batch_size": 64,
+        "grad_clip": false,
+        "scheduler": false
     }
 }

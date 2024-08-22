@@ -33,8 +33,9 @@ def main(
         )
     )
 
-    name = f"ModelIAS_emb_{model_config['emb_size']}_hid_{model_config['hid_size']}_edo_{model_config['emb_dropout']}_odo_{model_config['out_dropout']}_ido_{model_config['in_dropout']}_lay_{model_config['n_layers']}_bid_{model_config['bidirectional']}_{train_config['train_batch_size']}_{train_config['dev_batch_size']}_{train_config['test_batch_size']}"
-
+    # name = f"ModelIAS_emb_{model_config['emb_size']}_hid_{model_config['hid_size']}_edo_{model_config['emb_dropout']}_odo_{model_config['out_dropout']}_ido_{model_config['in_dropout']}_lay_{model_config['n_layers']}_bid_{model_config['bidirectional']}_{train_config['train_batch_size']}_{train_config['dev_batch_size']}_{train_config['test_batch_size']}"
+    name = train_config["name"]
+    
     # TENSORBOARD
     writer: SummaryWriter = SummaryWriter(
         log_dir=f"log/{name}"
@@ -66,7 +67,6 @@ def load_config(config_file):
 
 
 if __name__ == "__main__":
-    # Global variables
     device = "cuda:0"
     # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"  # Used to report errors on CUDA side
     PAD_TOKEN = 0
@@ -76,7 +76,6 @@ if __name__ == "__main__":
 
     for key, config in config.items():
         logging.info(" !! Running %s !!", key)
-        # add assert here if needed
 
         train_config = {
             "name": key,

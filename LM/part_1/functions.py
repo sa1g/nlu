@@ -85,8 +85,6 @@ def get_loaders_lang(
     dev_raw = read_file(f"{path}/ptb.valid.txt")
     test_raw = read_file(f"{path}/ptb.test.txt")
 
-    # vocab = get_vocab(train_raw, ["<pad>", "<eos>"])
-
     lang = Lang(train_raw, ["<pad>", "<eos>"])
 
     train_dataset = PennTreeBank(train_raw, lang)
@@ -146,12 +144,6 @@ def get_optimizer(model: nn.Module, config: dict = {}):
             weight_decay=config["weight_decay"],
         )
     elif config["optim_name"] == "NTAvSGD":
-        # return optim.ASGD(
-        #     model.parameters(),
-        #     lr=1e-2,
-        #     t0=config.get("t0", 1e6),
-        #     weight_decay=0
-        # )
         return NTAvSGD(
             model.parameters(),
             lr=config["lr"],

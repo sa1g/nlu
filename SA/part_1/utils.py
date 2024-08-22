@@ -7,43 +7,6 @@ import torch
 from transformers import BertTokenizer, get_linear_schedule_with_warmup
 
 
-# def load_data(path):
-#     raw_data = []
-
-#     with open(path, encoding="utf-8", mode="r") as f:
-#         lines = f.readlines()
-
-#         error = 0
-
-#         for line in lines:
-#             _, tags = line.split("####")
-
-#             tags = tags.split(" ")
-
-#             all_body, all_tags = [], []
-#             for tag in tags:
-#                 a = tag.split("=")
-
-#                 # if `\n` is present in the tag, remove it
-#                 if "\n" in a[1]:
-#                     a[1] = a[1].replace("\n", "")
-
-#                 all_body.append(a[0])
-#                 all_tags.append(a[1])
-
-#             if len(all_body) != len(all_tags):
-#                 error += 1
-#                 print(all_body)
-#                 print(all_tags)
-
-#             all_body = " ".join(all_body)
-#             all_tags = " ".join(all_tags)
-
-#             raw_data.append({"utterance": all_body, "slot": all_tags})
-
-#         print("Error: ", error)
-#         return raw_data
-
 def load_data(path):
     def convert_tags(tags):
         """

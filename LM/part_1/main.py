@@ -39,7 +39,7 @@ def main(train_config: dict, model_config: dict, optimizer_config: dict):
 
     # TENSORBOARD
     writer: SummaryWriter = SummaryWriter(
-        log_dir=f"log/{model.name}-{train_config['train_batch_size']}-{train_config['dev_batch_size']}"
+        log_dir=f"log/{model.name}-{train_config['train_batch_size']}-{train_config['dev_batch_size']}-{optimizer_config['lr']}"
     )
 
     # TRAINING
