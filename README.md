@@ -25,9 +25,3 @@ Install the required packages:
 
 Go to the assignment directory and run the main file:
 > python3 main.py
-
-## LM - Language Model
-
-## NLU - Natural Language Understanding
-
-## Sentiment Analysis
