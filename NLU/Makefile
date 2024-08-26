@@ -5,8 +5,9 @@ TEST = https://raw.githubusercontent.com/BrownFortress/IntentSlotDatasets/main/A
 
 install:
 	mkdir -p $(DIR)
-	wget -P $(DIR) $(TRAIN)
-	wget -P $(DIR) $(TEST)
+	curl -L -o $(DIR)/train.json $(TRAIN)
+	curl -L -o $(DIR)/test.json $(TEST)
 
 clean:
 	rm -rf $(DIR)
+

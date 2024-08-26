@@ -9,20 +9,6 @@ Modify the baseline architecture Model by:
 **Slot filling**: F1 score with conll
 
 ***Dataset to use: ATIS***
-
-# Stuff to do
-1. ~~model saving~~
-1. ~~multiple runs to get avg and std~~
-2. ~~tensorboard support~~
-3. ~~bidirectionality~~
-    - In a unidirectional LSTM, the forward pass captures information from past to future. By adding bidirectionality, the backward pass captures information from future to past. This allows the model to understand the context better since it has information from both preceding and succeeding words or time steps. Consequently, we can expect better performance in terms of accuracy for intent classification and F1 score for slot filling. Additionally, the model's understanding should be more balanced and less sensitive to the specific context and expression of the sentence.
-4. ~~dropout layer~~
-5. experiment config
-6. it would be cool, for fun, to add model quantization during inference :P
-
-# What is this project about?
-We are working on a specific case of [Shallow Parsing](https://en.wikipedia.org/wiki/Shallow_parsing) called Slot Filling (Concept tagging). Here we want to, given an input sequence, classify the intention of the sentence. Hence intention classification. At the same time we also want to do slot filling.
-
 The dataset we are using is the ATIS, a collection of records of questions asked by passengers about flights in the US.
 
 We have 4978 train samples (that will be subdivided in train/eval) and 893 test samples:

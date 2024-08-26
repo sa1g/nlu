@@ -7,9 +7,9 @@ EVAL = https://raw.githubusercontent.com/BrownFortress/NLU-2024-Labs/main/labs/d
 
 install:
 	mkdir -p $(DIR)
-	wget -P $(DIR) $(TRAIN)
-	wget -P $(DIR) $(TEST)
-	wget $(EVAL)
+	curl -L -o $(DIR)/ptb.train.txt $(TRAIN)
+	curl -L -o $(DIR)/ptb.test.txt $(TEST)
+	curl -L -o $(DIR)/ptb.valid.txt $(EVAL)
 
 clean:
 	rm -rf $(DIR)
