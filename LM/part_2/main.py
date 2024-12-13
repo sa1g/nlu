@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-c", default="config.json", help="Config file json")
 
 
-def main(train_config: dict, model_config: dict, optimizer_config: dict):
+def main(train_config: dict, model_config: dict, optimizer_config: dict, experiment_name: str):
     train_loader, dev_loader, test_loader, lang = get_loaders_lang(
         train_config["dataset_path"],
         train_config["train_batch_size"],
@@ -42,7 +42,7 @@ def main(train_config: dict, model_config: dict, optimizer_config: dict):
     logging.debug("Model done")
 
     # TENSORBOARD
-    writer: SummaryWriter = SummaryWriter(log_dir=f"log/{model.name}-{optimizer_config['lr']}")
+    writer: SummaryWriter = SummaryWriter(log_dir=f"log/{experiment_name}")
 
     # TRAINING
     train(
@@ -110,4 +110,4 @@ if __name__ == "__main__":
             "logging_interval": config.get("train_batch_size", 128)
         }
 
-        main(train_config, model_config, optimizer_config)
+        main(train_config, model_config, optimizer_config, experiment_name=key)

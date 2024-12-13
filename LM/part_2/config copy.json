@@ -1,6 +1,6 @@
 {
-    "baseline": {
-        "model_type": "LM_RNN",
+    "wt05": {
+        "model_type": "LM_LSTM",
         "dataset_path": "../dataset",
         "train_batch_size": 64,
         "dev_batch_size": 64,
@@ -8,12 +8,28 @@
         "emb_size": 300,
         "hid_size": 300,
         "n_layers": 1,
-        "lr": 2,
+        "lr": 0.5,
         "n_epochs": 100,
         "clip": 5,
-        "optim_name": "SGD"
+        "optim_name": "SGD",
+        "weight_tying": true
     },
-    "wt": {
+    "wt1": {
+        "model_type": "LM_LSTM",
+        "dataset_path": "../dataset",
+        "train_batch_size": 64,
+        "dev_batch_size": 64,
+        "test_batch_size": 64,
+        "emb_size": 300,
+        "hid_size": 300,
+        "n_layers": 1,
+        "lr": 1,
+        "n_epochs": 100,
+        "clip": 5,
+        "optim_name": "SGD",
+        "weight_tying": true
+    },
+    "wt2": {
         "model_type": "LM_LSTM",
         "dataset_path": "../dataset",
         "train_batch_size": 64,
@@ -28,7 +44,39 @@
         "optim_name": "SGD",
         "weight_tying": true
     },
-    "vd1-wt": {
+    "wt05-vd01": {
+        "model_type": "LM_LSTM",
+        "dataset_path": "../dataset",
+        "train_batch_size": 64,
+        "dev_batch_size": 64,
+        "test_batch_size": 64,
+        "emb_size": 300,
+        "hid_size": 300,
+        "n_layers": 1,
+        "lr": 0.5,
+        "n_epochs": 100,
+        "clip": 5,
+        "optim_name": "SGD",
+        "weight_tying": true,
+        "variational_dropout": 0.1
+    },
+    "wt10-vd01": {
+        "model_type": "LM_LSTM",
+        "dataset_path": "../dataset",
+        "train_batch_size": 64,
+        "dev_batch_size": 64,
+        "test_batch_size": 64,
+        "emb_size": 300,
+        "hid_size": 300,
+        "n_layers": 1,
+        "lr": 1,
+        "n_epochs": 100,
+        "clip": 5,
+        "optim_name": "SGD",
+        "weight_tying": true,
+        "variational_dropout": 0.1
+    },
+    "wt20-vd01": {
         "model_type": "LM_LSTM",
         "dataset_path": "../dataset",
         "train_batch_size": 64,
@@ -44,7 +92,7 @@
         "weight_tying": true,
         "variational_dropout": 0.1
     },
-    "vd1-nowt": {
+    "wt05-vd02": {
         "model_type": "LM_LSTM",
         "dataset_path": "../dataset",
         "train_batch_size": 64,
@@ -53,14 +101,30 @@
         "emb_size": 300,
         "hid_size": 300,
         "n_layers": 1,
-        "lr": 2,
+        "lr": 0.5,
         "n_epochs": 100,
         "clip": 5,
         "optim_name": "SGD",
-        "weight_tying": false,
-        "variational_dropout": 0.1
+        "weight_tying": true,
+        "variational_dropout": 0.2
     },
-    "vd2": {
+    "wt10-vd02": {
+        "model_type": "LM_LSTM",
+        "dataset_path": "../dataset",
+        "train_batch_size": 64,
+        "dev_batch_size": 64,
+        "test_batch_size": 64,
+        "emb_size": 300,
+        "hid_size": 300,
+        "n_layers": 1,
+        "lr": 1,
+        "n_epochs": 100,
+        "clip": 5,
+        "optim_name": "SGD",
+        "weight_tying": true,
+        "variational_dropout": 0.2
+    },
+    "wt20-vd02": {
         "model_type": "LM_LSTM",
         "dataset_path": "../dataset",
         "train_batch_size": 64,
@@ -76,7 +140,39 @@
         "weight_tying": true,
         "variational_dropout": 0.2
     },
-    "vd3": {
+    "wt05-vd03": {
+        "model_type": "LM_LSTM",
+        "dataset_path": "../dataset",
+        "train_batch_size": 64,
+        "dev_batch_size": 64,
+        "test_batch_size": 64,
+        "emb_size": 300,
+        "hid_size": 300,
+        "n_layers": 1,
+        "lr": 0.5,
+        "n_epochs": 100,
+        "clip": 5,
+        "optim_name": "SGD",
+        "weight_tying": true,
+        "variational_dropout": 0.3
+    },
+    "wt10-vd03": {
+        "model_type": "LM_LSTM",
+        "dataset_path": "../dataset",
+        "train_batch_size": 64,
+        "dev_batch_size": 64,
+        "test_batch_size": 64,
+        "emb_size": 300,
+        "hid_size": 300,
+        "n_layers": 1,
+        "lr": 1,
+        "n_epochs": 100,
+        "clip": 5,
+        "optim_name": "SGD",
+        "weight_tying": true,
+        "variational_dropout": 0.3
+    },
+    "wt20-vd03": {
         "model_type": "LM_LSTM",
         "dataset_path": "../dataset",
         "train_batch_size": 64,
@@ -92,6 +188,12 @@
         "weight_tying": true,
         "variational_dropout": 0.3
     },
+
+
+
+
+
+
     "NTAvSGD-base": {
         "model_type": "LM_LSTM",
         "dataset_path": "../dataset",

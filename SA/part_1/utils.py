@@ -131,6 +131,8 @@ def get_data_and_mapping(
     test_path=os.path.join("..", "dataset", "laptop14_test.txt"),
 ):
     tmp_train_raw = load_data(train_path)
+    print(tmp_train_raw)
+    exit()
     test_raw = load_data(test_path)
 
     train_raw, dev_raw = split_sets(tmp_train_raw)
