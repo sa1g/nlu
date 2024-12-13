@@ -14,6 +14,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("-c", default="config.json", help="Config file json")
 logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.DEBUG)
+
 # logging.basicConfig(
 #     format="%(levelname)s:%(filename)s:%(funcName)s:%(lineno)d:%(message)s",
 #     level=logging.DEBUG

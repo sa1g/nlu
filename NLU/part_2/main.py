@@ -24,7 +24,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-c", default="config.json", help="Config file json")
-logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.CRITICAL)
+logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.DEBUG)
 
 
 def load_config(config_file):
@@ -76,7 +76,7 @@ def main(config: dict):
     best_model = None
     best_f1 = 0
 
-    for _ in tqdm(range(config["runs"]), desc="Runs"):
+    for r in tqdm(range(config["runs"]), desc="Runs"):
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset,
             batch_size=config["train_batch_size"],
@@ -162,9 +162,9 @@ def main(config: dict):
             slots2id,
         )
 
-        writer.add_scalar("F1/test", f1, epoch)
-        writer.add_scalar("Accuracy/test", accuracy, epoch)
-        writer.add_scalar("Loss/test", sum(loss) / len(loss), epoch)
+        writer.add_scalar("F1/test", f1, r)
+        writer.add_scalar("Accuracy/test", accuracy, r)
+        writer.add_scalar("Loss/test", sum(loss) / len(loss), r)
 
 
         print(

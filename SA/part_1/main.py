@@ -86,7 +86,7 @@ def main(config: dict):
 
     rolling_f1, rolling_prec, rolling_recall, rolling_loss = [], [], [], []
 
-    for _ in tqdm(range(config["runs"]), desc="Runs"):
+    for r in tqdm(range(config["runs"]), desc="Runs"):
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset,
             batch_size=config["train_batch_size"],
@@ -159,9 +159,9 @@ def main(config: dict):
             model, test_dataloader, slot_loss_fn, tokenizer, id2slots, slots2id
         )
 
-        writer.add_scalar("F1/test", f1, epoch)
-        writer.add_scalar("Precision/test", precision, epoch)
-        writer.add_scalar("Recall/test", recall, epoch)
+        writer.add_scalar("F1/test", f1, r)
+        writer.add_scalar("Precision/test", precision, r)
+        writer.add_scalar("Recall/test", recall, r)
 
     PATH = f"bin/{name}.pt"
     saving_object = {

@@ -14,24 +14,24 @@ def load_data(path):
         """
         new_tags = []
         n_tags = len(tags)
-        
+
         i = 0
         while i < n_tags:
-            if tags[i] == 'O':
-                new_tags.append('O')
+            if tags[i] == "O":
+                new_tags.append("O")
                 i += 1
             else:
                 if i + 1 < n_tags and tags[i + 1] == tags[i]:
-                    new_tags.append('B')
+                    new_tags.append("B")
                     i += 1
                     while i < n_tags and tags[i] == tags[i - 1]:
                         if i + 1 < n_tags and tags[i + 1] == tags[i]:
-                            new_tags.append('I')
+                            new_tags.append("I")
                         else:
-                            new_tags.append('E')
+                            new_tags.append("E")
                         i += 1
                 else:
-                    new_tags.append('S')
+                    new_tags.append("S")
                     i += 1
         return new_tags
 
@@ -117,11 +117,11 @@ def tokenize_and_preserve_labels(sentence, text_labels, tokenizer):
 
     for word, label in zip(sentence.split(), text_labels):
         tokenized_word = tokenizer.tokenize(word)
-        n_subwords = len(tokenized_word)
 
         tokenized_sentence.extend(tokenized_word)
-        # labels.extend([label] + ["X"] * (n_subwords - 1))
-        labels.extend([label] * n_subwords)
+
+        labels.extend([label])
+        labels.extend(["pad"] * (len(tokenized_word) - 1))
 
     return tokenized_sentence, labels
 
@@ -131,8 +131,8 @@ def get_data_and_mapping(
     test_path=os.path.join("..", "dataset", "laptop14_test.txt"),
 ):
     tmp_train_raw = load_data(train_path)
-    print(tmp_train_raw)
-    exit()
+    # print(tmp_train_raw)
+    # exit()
     test_raw = load_data(test_path)
 
     train_raw, dev_raw = split_sets(tmp_train_raw)
@@ -141,12 +141,10 @@ def get_data_and_mapping(
     logging.info("Dev size: %d", len(dev_raw))
     logging.info("Test size: %d", len(test_raw))
 
-
-
     slots_set = set()
     for phrases in [train_raw, dev_raw, test_raw]:
         for phrase in phrases:
-            for slot in phrase['slot'].split(" "):
+            for slot in phrase["slot"].split(" "):
                 slots_set.add(slot)
 
     slots2id = {"pad": 0}
@@ -193,7 +191,9 @@ def encode_data(tokenized_data, tokenizer, slots2id):
 
         # Encode the tokenized slots
         encoded_set["encoded_slots"] = [
+            # slots2id[slot] if slot != 0 else 0 for slot in dset["tokenized_slots"]
             slots2id[slot] for slot in dset["tokenized_slots"]
+        
         ]
 
         encoded_data.append(encoded_set)
@@ -315,6 +315,7 @@ class ATISDataset(torch.utils.data.Dataset):
 
 SMALL_POSITIVE_CONST = 1e-4
 
+
 def tag2ot(ote_tag_sequence):
     """
     transform ote tag sequence to a sequence of opinion target
@@ -326,16 +327,17 @@ def tag2ot(ote_tag_sequence):
     beg, end = -1, -1
     for i in range(n_tags):
         tag = ote_tag_sequence[i]
-        if tag == 'S':
+        if tag == "S":
             ot_sequence.append((i, i))
-        elif tag == 'B':
+        elif tag == "B":
             beg = i
-        elif tag == 'E':
+        elif tag == "E":
             end = i
             if end > beg > -1:
                 ot_sequence.append((beg, end))
                 beg, end = -1, -1
     return ot_sequence
+
 
 def match_ot(gold_ote_sequence, pred_ote_sequence):
     """
@@ -349,6 +351,7 @@ def match_ot(gold_ote_sequence, pred_ote_sequence):
         if t in gold_ote_sequence:
             n_hit += 1
     return n_hit
+
 
 def evaluate_ote(gold_ot, pred_ot):
     """
@@ -364,9 +367,13 @@ def evaluate_ote(gold_ot, pred_ot):
     for i in range(n_samples):
         g_ot = gold_ot[i]
         p_ot = pred_ot[i]
-        g_ot_sequence, p_ot_sequence = tag2ot(ote_tag_sequence=g_ot), tag2ot(ote_tag_sequence=p_ot)
+        g_ot_sequence, p_ot_sequence = tag2ot(ote_tag_sequence=g_ot), tag2ot(
+            ote_tag_sequence=p_ot
+        )
         # hit number
-        n_hit_ot = match_ot(gold_ote_sequence=g_ot_sequence, pred_ote_sequence=p_ot_sequence)
+        n_hit_ot = match_ot(
+            gold_ote_sequence=g_ot_sequence, pred_ote_sequence=p_ot_sequence
+        )
         n_tp_ot += n_hit_ot
         n_gold_ot += len(g_ot_sequence)
         n_pred_ot += len(p_ot_sequence)
@@ -374,6 +381,8 @@ def evaluate_ote(gold_ot, pred_ot):
     # calculate precision, recall and f1 for ote task
     ot_precision = float(n_tp_ot) / float(n_pred_ot + SMALL_POSITIVE_CONST)
     ot_recall = float(n_tp_ot) / float(n_gold_ot + SMALL_POSITIVE_CONST)
-    ot_f1 = 2 * ot_precision * ot_recall / (ot_precision + ot_recall + SMALL_POSITIVE_CONST)
+    ot_f1 = (
+        2 * ot_precision * ot_recall / (ot_precision + ot_recall + SMALL_POSITIVE_CONST)
+    )
     ote_scores = (ot_precision, ot_recall, ot_f1)
     return ote_scores

@@ -5,12 +5,14 @@ from collections import Counter
 from sklearn.model_selection import train_test_split
 import torch
 
+
 def load_data(path):
     dataset = []
     with open(path, "r") as file:
         dataset = json.loads(file.read())
 
     return dataset
+
 
 def split_sets(tmp_train_raw):
     portion = 0.10
@@ -25,7 +27,7 @@ def split_sets(tmp_train_raw):
 
     # If some intents occurs only once, we put them in training
     for id_y, y in enumerate(intents):
-        if count_y[y] > 1: 
+        if count_y[y] > 1:
             inputs.append(tmp_train_raw[id_y])
             labels.append(y)
         else:
@@ -45,6 +47,7 @@ def split_sets(tmp_train_raw):
     dev_raw = X_dev
 
     return train_raw, dev_raw
+
 
 def get_data_and_mapping(
     train=os.path.join("../dataset", "ATIS", "train.json"),
@@ -71,17 +74,18 @@ def get_data_and_mapping(
 
     slots2id = {"pad": 0}
     id2slots = {0: "O"}
-    for slot in (slots_set):
+    for slot in slots_set:
         slots2id[slot] = len(slots2id)
         id2slots[len(id2slots)] = slot
 
     intent2id = {}
     id2intent = {}
-    for intent in (intents_set):
+    for intent in intents_set:
         intent2id[intent] = len(intent2id)
         id2intent[len(id2intent)] = intent
 
     return train_raw, dev_raw, test_raw, slots2id, id2slots, intent2id, id2intent
+
 
 def tokenize_and_preserve_labels(sentence, text_labels, tokenizer):
     text_labels = text_labels.split()
@@ -90,13 +94,21 @@ def tokenize_and_preserve_labels(sentence, text_labels, tokenizer):
 
     for word, label in zip(sentence.split(), text_labels):
         tokenized_word = tokenizer.tokenize(word)
-        n_subwords = len(tokenized_word)
+        # n_subwords = len(tokenized_word)
 
+        # tokenized_sentence.extend(tokenized_word)
+
+        # labels.extend([label] * n_subwords)
+
+        # Add the tokenized word to the tokenized sentence
         tokenized_sentence.extend(tokenized_word)
 
-        labels.extend([label] * n_subwords)
+        # Assign the original label to the first subtoken and padding (-100) to the rest
+        labels.extend([label])
+        labels.extend(["pad"] * (len(tokenized_word) - 1))
 
     return tokenized_sentence, labels
+
 
 def tokenize_data(raw_data, tokenizer):
     processed_data = []
@@ -116,11 +128,12 @@ def tokenize_data(raw_data, tokenizer):
         processed_data.append(tokenized_set)
     return processed_data
 
+
 def encode_data(tokenized_data, tokenizer, slots2id, intent2id):
     encoded_data = []
     for dset in tokenized_data:
         encoded_set = {}
-        
+
         encoded_set["raw_intent"] = dset["raw_intent"]
         encoded_set["raw_slots"] = dset["raw_slots"]
         encoded_set["raw_utterance"] = dset["raw_utterance"]
@@ -128,10 +141,18 @@ def encode_data(tokenized_data, tokenizer, slots2id, intent2id):
         encoded_set["tokenized_slots"] = dset["tokenized_slots"]
 
         # Encode the tokenized utterance
-        encoded_set["encoded_utterance"] = tokenizer.encode_plus(dset["tokenized_utterance"], add_special_tokens=False)
+        encoded_set["encoded_utterance"] = tokenizer.encode_plus(
+            dset["tokenized_utterance"], add_special_tokens=False
+        )
 
         # Encode the tokenized slots
-        encoded_set["encoded_slots"] = [slots2id[slot] for slot in dset["tokenized_slots"]]
+        # encoded_set["encoded_slots"] = [
+            # slots2id[slot] if slot != -100 else -100 for slot in dset["tokenized_slots"]
+        # ]
+
+        encoded_set["encoded_slots"] = [
+            slots2id[slot] for slot in dset["tokenized_slots"] 
+        ]
 
         # Encode the intent
         encoded_set["encoded_intent"] = intent2id[dset["raw_intent"]]
@@ -139,10 +160,14 @@ def encode_data(tokenized_data, tokenizer, slots2id, intent2id):
         encoded_data.append(encoded_set)
     return encoded_data
 
+
 def check_preprocessing(encoded_data):
     err = 0
     for tokenized_data in encoded_data:
-        if ((len(tokenized_data["encoded_utterance"]["input_ids"]) - len(tokenized_data["encoded_slots"])) != 0):
+        if (
+            len(tokenized_data["encoded_utterance"]["input_ids"])
+            - len(tokenized_data["encoded_slots"])
+        ) != 0:
             err += 1
 
             logging.debug(tokenized_data["tokenized_utterance"])
@@ -150,12 +175,13 @@ def check_preprocessing(encoded_data):
             logging.debug(tokenized_data["encoded_utterance"])
             logging.debug(tokenized_data["encoded_slots"])
             logging.debug(tokenized_data["encoded_intent"])
-            
+
             logging.debug("\n\n")
-    
+
     if err != 0:
         logging.error("There are %d errors in the preprocessing", err)
         raise ValueError("There are errors in the preprocessing")
+
 
 def preprocess_data(raw_data, tokenizer, slots2id, intent2id):
     """
@@ -180,7 +206,7 @@ def preprocess_data(raw_data, tokenizer, slots2id, intent2id):
     - encoded_intent
     """
 
-    # Tokenize `utterance` and `slots` with sub-token labelling. The subtoken is labelled with the same label 
+    # Tokenize `utterance` and `slots` with sub-token labelling. The subtoken is labelled with the same label
     processed_data = tokenize_data(raw_data, tokenizer)
 
     # Encode the tokenized data
@@ -191,22 +217,35 @@ def preprocess_data(raw_data, tokenizer, slots2id, intent2id):
 
     return encoded_data
 
+
 class ATISDataset(torch.utils.data.Dataset):
-    def __init__ (self, processed_data):
+    def __init__(self, processed_data):
         self.input = [data["encoded_utterance"]["input_ids"] for data in processed_data]
-        self.attention_mask = [data["encoded_utterance"]["attention_mask"] for data in processed_data]
-        self.token_type_ids = [data["encoded_utterance"]["token_type_ids"] for data in processed_data]
+        self.attention_mask = [
+            data["encoded_utterance"]["attention_mask"] for data in processed_data
+        ]
+        self.token_type_ids = [
+            data["encoded_utterance"]["token_type_ids"] for data in processed_data
+        ]
         self.slots = [data["encoded_slots"] for data in processed_data]
         self.intent = [data["encoded_intent"] for data in processed_data]
 
     def __len__(self):
         return len(self.input)
-    
+
     def __getitem__(self, idx):
-        return self.input[idx], self.attention_mask[idx], self.token_type_ids[idx], self.slots[idx], self.intent[idx]
-    
+        return (
+            self.input[idx],
+            self.attention_mask[idx],
+            self.token_type_ids[idx],
+            self.slots[idx],
+            self.intent[idx],
+        )
+
+
 def get_device():
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def collate_fn(data):
     device = get_device()
@@ -216,10 +255,21 @@ def collate_fn(data):
 
     # PAD all the input sequences to the max length
     slots_len = torch.tensor([len(slots) for _, _, _, slots, _ in data]).to(device)
-    input_ids = torch.tensor([sentence + [0] * (max_len - len(sentence)) for sentence, _, _, _, _ in data]).to(device)
-    attention_mask = torch.tensor([[1] * len(mask) + [0] * (max_len - len(mask)) for _, mask, _, _, _ in data]).to(device)
-    token_type_ids = torch.tensor([token_type_ids + [0] * (max_len - len(token_type_ids)) for _, _, token_type_ids, _, _ in data]).to(device)
-    slots = torch.tensor([slots + [0] * (max_len - len(slots)) for _, _, _, slots, _ in data]).to(device)
+    input_ids = torch.tensor(
+        [sentence + [0] * (max_len - len(sentence)) for sentence, _, _, _, _ in data]
+    ).to(device)
+    attention_mask = torch.tensor(
+        [[1] * len(mask) + [0] * (max_len - len(mask)) for _, mask, _, _, _ in data]
+    ).to(device)
+    token_type_ids = torch.tensor(
+        [
+            token_type_ids + [0] * (max_len - len(token_type_ids))
+            for _, _, token_type_ids, _, _ in data
+        ]
+    ).to(device)
+    slots = torch.tensor(
+        [slots + [0] * (max_len - len(slots)) for _, _, _, slots, _ in data]
+    ).to(device)
     intent = torch.tensor([intent for _, _, _, _, intent in data]).to(device)
 
     return {
@@ -228,6 +278,5 @@ def collate_fn(data):
         "attention_mask": attention_mask,
         "token_type_ids": token_type_ids,
         "slots": slots,
-        "intent": intent
+        "intent": intent,
     }
-
