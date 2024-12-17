@@ -192,8 +192,8 @@ def encode_data(tokenized_data, tokenizer, slots2id):
         # Encode the tokenized slots
         encoded_set["encoded_slots"] = [
             # slots2id[slot] if slot != 0 else 0 for slot in dset["tokenized_slots"]
-            slots2id[slot] for slot in dset["tokenized_slots"]
-        
+            slots2id[slot]
+            for slot in dset["tokenized_slots"]
         ]
 
         encoded_data.append(encoded_set)

@@ -83,7 +83,7 @@ class IntentsAndSlots(data.Dataset):
     def mapping_lab(self, data, mapper):
         return [mapper[x] if x in mapper else mapper[self.unk] for x in data]
 
-    def mapping_seq(self, data, mapper):  
+    def mapping_seq(self, data, mapper):
         # Map sequences to number
         res = []
         for seq in data:
@@ -140,6 +140,22 @@ def collate_fn(data):
 
 
 def split_dev_set(tmp_train_raw, test_raw):
+    """
+    Splits the training data into training and development sets while ensuring stratification based on intents.
+    Args:
+        tmp_train_raw (list): A list of dictionaries representing the raw training data. Each dictionary should have an "intent" key.
+        test_raw (list): A list of dictionaries representing the raw test data. Each dictionary should have an "intent" key.
+    Returns:
+        tuple: A tuple containing three elements:
+            - train_raw (list): The training set after splitting.
+            - dev_raw (list): The development set after splitting.
+            - test_raw (list): The original test set.
+    Notes:
+        - The function ensures that intents occurring only once are always included in the training set.
+        - The development set is created by stratified random sampling with a portion size of 10%.
+        - The function logs the sizes of the training, development, and test sets.
+    """
+
     portion = 0.10
 
     intents = [x["intent"] for x in tmp_train_raw]  # We stratify on intents
@@ -181,6 +197,24 @@ def split_dev_set(tmp_train_raw, test_raw):
 
 
 def get_loaders_lang(dataset_path, train_batch_size, dev_batch_size, test_batch_size):
+    """
+    Loads and processes the dataset, creating data loaders for training, development, and testing.
+    Args:
+        dataset_path (str): Path to the dataset directory containing 'train.json' and 'test.json'.
+        train_batch_size (int): Batch size for the training data loader.
+        dev_batch_size (int): Batch size for the development data loader.
+        test_batch_size (int): Batch size for the testing data loader.
+    Returns:
+        tuple: A tuple containing:
+            - train_loader (DataLoader): DataLoader for the training dataset.
+            - dev_loader (DataLoader): DataLoader for the development dataset.
+            - test_loader (DataLoader): DataLoader for the testing dataset.
+            - lang (Lang): Language object containing vocabulary, intents, and slots.
+            - w2id (dict): Dictionary mapping words to their corresponding IDs.
+            - slot2id (dict): Dictionary mapping slot labels to their corresponding IDs.
+            - intent2id (dict): Dictionary mapping intent labels to their corresponding IDs.
+    """
+
     tmp_train_raw = load_data(os.path.join(dataset_path, "train.json"))
     test_raw = load_data(os.path.join(dataset_path, "test.json"))
 
@@ -189,35 +223,35 @@ def get_loaders_lang(dataset_path, train_batch_size, dev_batch_size, test_batch_
 
     train_raw, dev_raw, test_raw = split_dev_set(tmp_train_raw, test_raw)
 
-    w2id = {'pad':PAD_TOKEN, 'unk': 1}
-    slot2id = {'pad':PAD_TOKEN}
+    w2id = {"pad": PAD_TOKEN, "unk": 1}
+    slot2id = {"pad": PAD_TOKEN}
     intent2id = {}
-    
+
     # Map the words only from the train set
     # Map slot and intent labels of train, dev and test set. 'unk' is not needed.
     for example in train_raw:
-        for w in example['utterance'].split():
+        for w in example["utterance"].split():
             if w not in w2id:
-                w2id[w] = len(w2id)   
-        for slot in example['slots'].split():
+                w2id[w] = len(w2id)
+        for slot in example["slots"].split():
             if slot not in slot2id:
                 slot2id[slot] = len(slot2id)
-        if example['intent'] not in intent2id:
-            intent2id[example['intent']] = len(intent2id)
-            
+        if example["intent"] not in intent2id:
+            intent2id[example["intent"]] = len(intent2id)
+
     for example in dev_raw:
-        for slot in example['slots'].split():
+        for slot in example["slots"].split():
             if slot not in slot2id:
                 slot2id[slot] = len(slot2id)
-        if example['intent'] not in intent2id:
-            intent2id[example['intent']] = len(intent2id)
-            
+        if example["intent"] not in intent2id:
+            intent2id[example["intent"]] = len(intent2id)
+
     for example in test_raw:
-        for slot in example['slots'].split():
+        for slot in example["slots"].split():
             if slot not in slot2id:
                 slot2id[slot] = len(slot2id)
-        if example['intent'] not in intent2id:
-            intent2id[example['intent']] = len(intent2id)
+        if example["intent"] not in intent2id:
+            intent2id[example["intent"]] = len(intent2id)
 
     logging.debug(
         "# Vocabulary size: %i", len(w2id) - 2
@@ -244,7 +278,11 @@ def get_loaders_lang(dataset_path, train_batch_size, dev_batch_size, test_batch_
     train_loader = DataLoader(
         train_dataset, batch_size=train_batch_size, collate_fn=collate_fn, shuffle=True
     )
-    dev_loader = DataLoader(dev_dataset, batch_size=dev_batch_size, collate_fn=collate_fn)
-    test_loader = DataLoader(test_dataset, batch_size=test_batch_size, collate_fn=collate_fn)
+    dev_loader = DataLoader(
+        dev_dataset, batch_size=dev_batch_size, collate_fn=collate_fn
+    )
+    test_loader = DataLoader(
+        test_dataset, batch_size=test_batch_size, collate_fn=collate_fn
+    )
 
     return train_loader, dev_loader, test_loader, lang, w2id, slot2id, intent2id

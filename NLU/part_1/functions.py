@@ -17,6 +17,21 @@ from torch import optim
 
 
 def init_weights(mat):
+    """
+    Initialize the weights of the given model.
+    This function initializes the weights of the modules in the given model
+    using different strategies depending on the type of the module:
+    - For nn.GRU, nn.LSTM, and nn.RNN modules:
+        - The input-hidden weights (weight_ih) are initialized using Xavier uniform initialization.
+        - The hidden-hidden weights (weight_hh) are initialized using orthogonal initialization.
+        - The biases are initialized to zero.
+    - For nn.Linear modules:
+        - The weights are initialized uniformly in the range [-0.01, 0.01].
+        - The biases are initialized to 0.01 if they exist.
+    Args:
+        mat (torch.nn.Module): The model containing the modules to be initialized.
+    """
+
     for m in mat.modules():
         if type(m) in [nn.GRU, nn.LSTM, nn.RNN]:
             for name, param in m.named_parameters():
@@ -38,6 +53,20 @@ def init_weights(mat):
 
 
 def train_loop(data, optimizer, criterion_slots, criterion_intents, model, clip=5):
+    """
+    Trains the model for one epoch using the provided data, optimizer, and loss functions.
+    Args:
+        data (list): A list of samples, where each sample is a dictionary containing
+                     "utterances", "slots_len", "intents", and "y_slots".
+        optimizer (torch.optim.Optimizer): The optimizer used to update the model's weights.
+        criterion_slots (torch.nn.Module): The loss function for slot predictions.
+        criterion_intents (torch.nn.Module): The loss function for intent predictions.
+        model (torch.nn.Module): The model to be trained.
+        clip (float, optional): The maximum allowed value of the gradients. Defaults to 5.
+    Returns:
+        list: A list of loss values for each sample in the data.
+    """
+
     model.train()
     loss_array = []
     for sample in data:
@@ -56,6 +85,22 @@ def train_loop(data, optimizer, criterion_slots, criterion_intents, model, clip=
 
 
 def eval_loop(data, criterion_slots, criterion_intents, model, lang):
+    """
+    Evaluates the performance of a model on a given dataset.
+    Args:
+        data (iterable): The dataset to evaluate, where each sample is a dictionary containing
+                         "utterances", "slots_len", "intents", "y_slots", and "utterance".
+        criterion_slots (callable): The loss function for slot predictions.
+        criterion_intents (callable): The loss function for intent predictions.
+        model (torch.nn.Module): The model to evaluate.
+        lang (object): An object containing mappings from IDs to intents, slots, and words.
+    Returns:
+        tuple: A tuple containing:
+            - results (dict): The evaluation results for slot predictions.
+            - report_intent (dict): The classification report for intent predictions.
+            - loss_array (list): A list of loss values for each sample in the dataset.
+    """
+
     model.eval()
     loss_array = []
 
@@ -112,9 +157,20 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
     )
     return results, report_intent, loss_array
 
+
 def pad_list_of_lists(lists, pad_value=np.nan):
+    """
+    Pads each list in a list of lists to the length of the longest list with a specified pad value.
+    Parameters:
+    lists (list of lists): A list containing sublists of varying lengths.
+    pad_value (optional): The value to pad the sublists with. Default is np.nan.
+    Returns:
+    list of lists: A list where each sublist is padded to the length of the longest sublist with the pad_value.
+    """
+
     max_length = max(len(lst) for lst in lists)
     return [lst + [pad_value] * (max_length - len(lst)) for lst in lists]
+
 
 def train(
     model_config: dict,
@@ -132,6 +188,7 @@ def train(
     name: str,
     device: str,
 ):
+
     out_slot = len(lang.slot2id)
     out_int = len(lang.intent2id)
     vocab_len = len(lang.word2id)
@@ -223,16 +280,23 @@ def train(
     slot_f1s = np.array(slot_f1s)
     intent_acc = np.array(intent_acc)
 
-    for epoch, (avg_loss_train, std_loss_train, avg_loss_dev, std_loss_dev) in enumerate(zip(avg_losses_train, std_losses_train, avg_losses_dev, std_losses_dev)):
-        writer.add_scalar('Loss/Train_avg', avg_loss_train, epoch * 5)
-        writer.add_scalar('Loss/Train_std', std_loss_train, epoch * 5)
-        writer.add_scalar('Loss/Dev_avg', avg_loss_dev, epoch * 5)
-        writer.add_scalar('Loss/Dev_std', std_loss_dev, epoch * 5)
+    for epoch, (
+        avg_loss_train,
+        std_loss_train,
+        avg_loss_dev,
+        std_loss_dev,
+    ) in enumerate(
+        zip(avg_losses_train, std_losses_train, avg_losses_dev, std_losses_dev)
+    ):
+        writer.add_scalar("Loss/Train_avg", avg_loss_train, epoch * 5)
+        writer.add_scalar("Loss/Train_std", std_loss_train, epoch * 5)
+        writer.add_scalar("Loss/Dev_avg", avg_loss_dev, epoch * 5)
+        writer.add_scalar("Loss/Dev_std", std_loss_dev, epoch * 5)
 
-    writer.add_scalar('Metrics/Slot_F1_avg', slot_f1s.mean())
-    writer.add_scalar('Metrics/Slot_F1_std', slot_f1s.std())
-    writer.add_scalar('Metrics/Intent_Acc_avg', intent_acc.mean())
-    writer.add_scalar('Metrics/Intent_Acc_std', intent_acc.std())
+    writer.add_scalar("Metrics/Slot_F1_avg", slot_f1s.mean())
+    writer.add_scalar("Metrics/Slot_F1_std", slot_f1s.std())
+    writer.add_scalar("Metrics/Intent_Acc_avg", intent_acc.mean())
+    writer.add_scalar("Metrics/Intent_Acc_std", intent_acc.std())
 
     print("Slot F1", round(slot_f1s.mean(), 3), "+-", round(slot_f1s.std(), 3))
     print("Intent Acc", round(intent_acc.mean(), 3), "+-", round(intent_acc.std(), 3))

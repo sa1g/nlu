@@ -18,7 +18,22 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-c", default="config.json", help="Config file json")
 
 
-def main(train_config: dict, model_config: dict, optimizer_config: dict, experiment_name:str):
+def main(
+    train_config: dict, model_config: dict, optimizer_config: dict, experiment_name: str
+):
+    """
+    Main function to set up and train the model.
+
+    Args:
+        train_config (dict): Configuration dictionary for training parameters.
+        model_config (dict): Configuration dictionary for model parameters.
+        optimizer_config (dict): Configuration dictionary for optimizer parameters.
+        experiment_name (str): Name of the experiment for logging and saving purposes.
+
+    Returns:
+        None
+    """
+
     train_loader, dev_loader, test_loader, lang = get_loaders_lang(
         train_config["dataset_path"],
         train_config["train_batch_size"],
@@ -41,9 +56,7 @@ def main(train_config: dict, model_config: dict, optimizer_config: dict, experim
     logging.debug("Model done")
 
     # TENSORBOARD
-    writer: SummaryWriter = SummaryWriter(
-        log_dir=f"log/{experiment_name}"
-    )
+    writer: SummaryWriter = SummaryWriter(log_dir=f"log/{experiment_name}")
 
     # TRAINING
     train(
@@ -62,6 +75,12 @@ def main(train_config: dict, model_config: dict, optimizer_config: dict, experim
 
 
 def load_config(config_file):
+    """
+    Load the configuration file (json file).
+
+    Args:
+        config_file (str): Path to the config file.
+    """
     with open(config_file, "r") as file:
         configs = json.load(file)
     return configs
@@ -71,7 +90,7 @@ if __name__ == "__main__":
     torch.manual_seed(42)
     np.random.seed(42)
     random.seed(42)
-    
+
     DEVICE = "cuda:0"
 
     args = parser.parse_args()

@@ -15,6 +15,16 @@ def load_data(path):
 
 
 def split_sets(tmp_train_raw):
+    """
+    Splits the input dataset into training and development sets, ensuring stratification based on intents.
+    Args:
+        tmp_train_raw (list of dict): The raw training data, where each element is a dictionary containing an "intent" key.
+    Returns:
+        tuple: A tuple containing two lists:
+            - train_raw (list of dict): The training set after stratification.
+            - dev_raw (list of dict): The development set after stratification.
+    """
+
     portion = 0.10
 
     # We stratify on intents
@@ -53,6 +63,21 @@ def get_data_and_mapping(
     train=os.path.join("../dataset", "ATIS", "train.json"),
     test=os.path.join("../dataset", "ATIS", "test.json"),
 ):
+    """
+    Load and process training and testing data, and generate mappings for slots and intents.
+    Args:
+        train (str): Path to the training data file. Defaults to "../dataset/ATIS/train.json".
+        test (str): Path to the testing data file. Defaults to "../dataset/ATIS/test.json".
+    Returns:
+        tuple: A tuple containing:
+            - train_raw (list): List of training data samples.
+            - dev_raw (list): List of development data samples.
+            - test_raw (list): List of testing data samples.
+            - slots2id (dict): Dictionary mapping slot names to their corresponding IDs.
+            - id2slots (dict): Dictionary mapping slot IDs to their corresponding names.
+            - intent2id (dict): Dictionary mapping intent names to their corresponding IDs.
+            - id2intent (dict): Dictionary mapping intent IDs to their corresponding names.
+    """
 
     tmp_train_raw = load_data(train)
     test_raw = load_data(test)
@@ -88,6 +113,18 @@ def get_data_and_mapping(
 
 
 def tokenize_and_preserve_labels(sentence, text_labels, tokenizer):
+    """
+    Tokenizes a sentence while preserving the labels for each token.
+    Args:
+        sentence (str): The sentence to be tokenized.
+        text_labels (str): A string of labels corresponding to each word in the sentence, separated by spaces.
+        tokenizer (Tokenizer): The tokenizer to be used for tokenizing the sentence.
+    Returns:
+        tuple: A tuple containing:
+            - tokenized_sentence (list of str): The tokenized sentence.
+            - labels (list of str): The labels for each token, with padding ("pad") for subwords.
+    """
+
     text_labels = text_labels.split()
     tokenized_sentence = []
     labels = []
@@ -111,6 +148,18 @@ def tokenize_and_preserve_labels(sentence, text_labels, tokenizer):
 
 
 def tokenize_data(raw_data, tokenizer):
+    """
+    Tokenizes the given raw data using the provided tokenizer.
+    Args:
+        raw_data (list of dict): A list of dictionaries where each dictionary contains
+            the keys "intent", "slots", and "utterance".
+        tokenizer (Tokenizer): A tokenizer object that will be used to tokenize the utterances.
+    Returns:
+        list of dict: A list of dictionaries where each dictionary contains the original
+            "intent", "slots", and "utterance" along with the tokenized "tokenized_utterance"
+            and "tokenized_slots".
+    """
+
     processed_data = []
     for dset in raw_data:
         tokenized_set = {}
@@ -130,6 +179,31 @@ def tokenize_data(raw_data, tokenizer):
 
 
 def encode_data(tokenized_data, tokenizer, slots2id, intent2id):
+    """
+    Encodes tokenized data for natural language understanding tasks.
+    Args:
+        tokenized_data (list of dict): A list of dictionaries containing tokenized data.
+            Each dictionary should have the following keys:
+            - "raw_intent": The raw intent of the utterance.
+            - "raw_slots": The raw slots of the utterance.
+            - "raw_utterance": The raw text of the utterance.
+            - "tokenized_utterance": The tokenized version of the utterance.
+            - "tokenized_slots": The tokenized version of the slots.
+        tokenizer (Tokenizer): A tokenizer object with an `encode_plus` method for encoding utterances.
+        slots2id (dict): A dictionary mapping slot labels to their corresponding IDs.
+        intent2id (dict): A dictionary mapping intent labels to their corresponding IDs.
+    Returns:
+        list of dict: A list of dictionaries containing the encoded data. Each dictionary contains:
+            - "raw_intent": The raw intent of the utterance.
+            - "raw_slots": The raw slots of the utterance.
+            - "raw_utterance": The raw text of the utterance.
+            - "tokenized_utterance": The tokenized version of the utterance.
+            - "tokenized_slots": The tokenized version of the slots.
+            - "encoded_utterance": The encoded version of the tokenized utterance.
+            - "encoded_slots": The encoded version of the tokenized slots.
+            - "encoded_intent": The encoded version of the raw intent.
+    """
+
     encoded_data = []
     for dset in tokenized_data:
         encoded_set = {}
@@ -147,11 +221,11 @@ def encode_data(tokenized_data, tokenizer, slots2id, intent2id):
 
         # Encode the tokenized slots
         # encoded_set["encoded_slots"] = [
-            # slots2id[slot] if slot != -100 else -100 for slot in dset["tokenized_slots"]
+        # slots2id[slot] if slot != -100 else -100 for slot in dset["tokenized_slots"]
         # ]
 
         encoded_set["encoded_slots"] = [
-            slots2id[slot] for slot in dset["tokenized_slots"] 
+            slots2id[slot] for slot in dset["tokenized_slots"]
         ]
 
         # Encode the intent
@@ -162,6 +236,25 @@ def encode_data(tokenized_data, tokenizer, slots2id, intent2id):
 
 
 def check_preprocessing(encoded_data):
+    """
+    Checks the preprocessing of encoded data for consistency.
+    This function iterates through a list of tokenized data and verifies that the length of
+    the 'input_ids' in 'encoded_utterance' matches the length of 'encoded_slots'. If there
+    are discrepancies, it logs detailed debug information for each problematic entry and
+    raises a ValueError if any errors are found.
+    Args:
+        encoded_data (list): A list of dictionaries, where each dictionary contains the
+                             following keys:
+                             - "encoded_utterance": A dictionary with an "input_ids" key.
+                             - "encoded_slots": A list of encoded slots.
+                             - "tokenized_utterance": The original tokenized utterance.
+                             - "tokenized_slots": The original tokenized slots.
+                             - "encoded_intent": The encoded intent.
+    Raises:
+        ValueError: If there are any discrepancies between the lengths of 'input_ids' and
+                    'encoded_slots'.
+    """
+
     err = 0
     for tokenized_data in encoded_data:
         if (

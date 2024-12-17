@@ -23,7 +23,20 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-c", default="config.json", help="Config file json")
 
 
-def main(train_config: dict, model_config: dict, optimizer_config: dict, experiment_name: str):
+def main(
+    train_config: dict, model_config: dict, optimizer_config: dict, experiment_name: str
+):
+    """
+    Main function to set up data loaders, model, and initiate training.
+    Args:
+        train_config (dict): Configuration dictionary for training parameters.
+        model_config (dict): Configuration dictionary for model parameters.
+        optimizer_config (dict): Configuration dictionary for optimizer parameters.
+        experiment_name (str): Name of the experiment for logging purposes.
+    Returns:
+        None
+    """
+
     train_loader, dev_loader, test_loader, lang = get_loaders_lang(
         train_config["dataset_path"],
         train_config["train_batch_size"],
@@ -60,11 +73,14 @@ def main(train_config: dict, model_config: dict, optimizer_config: dict, experim
         dev_loader=dev_loader,
         test_loader=test_loader,
         device=DEVICE,
-        patience=train_config["patience"]
+        patience=train_config["patience"],
     )
 
 
 def load_config(config_file):
+    """
+    Load the configuration file.
+    """
     with open(config_file, "r") as file:
         configs = json.load(file)
     return configs
@@ -74,7 +90,7 @@ if __name__ == "__main__":
     torch.manual_seed(42)
     np.random.seed(42)
     random.seed(42)
-    
+
     DEVICE = "cuda:0"
 
     args = parser.parse_args()
@@ -92,7 +108,7 @@ if __name__ == "__main__":
             "test_batch_size": config.get("test_batch_size", 128),
             "n_epochs": config.get("n_epochs", 1),
             "clip": config.get("clip", 5),
-            "patience": config.get("patience", 5)
+            "patience": config.get("patience", 5),
         }
 
         model_config = {
@@ -115,7 +131,7 @@ if __name__ == "__main__":
             "weight_decay": config.get("weight_decay", 0.01),
             "momentum": config.get("momentum", 0),
             "non_monotonic_interval": config.get("non_monotonic_interval", 5),
-            "logging_interval": config.get("train_batch_size", 128)
+            "logging_interval": config.get("train_batch_size", 128),
         }
 
         main(train_config, model_config, optimizer_config, experiment_name=key)

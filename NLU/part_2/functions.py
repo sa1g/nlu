@@ -4,21 +4,62 @@ from conll import evaluate
 import torch
 from model import IntentSlotModel
 
+
 def calculate_loss(
-    intent_loss_fn, slot_loss_fn, intent_logits, slot_logits, intent_labels, slot_labels, slots2id
+    intent_loss_fn,
+    slot_loss_fn,
+    intent_logits,
+    slot_logits,
+    intent_labels,
+    slot_labels,
+    slots2id,
 ):
+    """
+    Calculate the combined loss for intent classification and slot filling.
+    Args:
+        intent_loss_fn (callable): Loss function for intent classification.
+        slot_loss_fn (callable): Loss function for slot filling.
+        intent_logits (torch.Tensor): Logits output from the model for intent classification.
+        slot_logits (torch.Tensor): Logits output from the model for slot filling.
+        intent_labels (torch.Tensor): Ground truth labels for intent classification.
+        slot_labels (torch.Tensor): Ground truth labels for slot filling.
+        slots2id (dict): Dictionary mapping slot names to their corresponding IDs.
+    Returns:
+        torch.Tensor: Combined loss for intent classification and slot filling.
+    """
+
     intent_loss = intent_loss_fn(intent_logits, intent_labels)
     slot_loss = slot_loss_fn(slot_logits.view(-1, len(slots2id)), slot_labels.view(-1))
 
     return intent_loss + slot_loss
+
 
 def eval_loop(
     model: IntentSlotModel,
     dataloader,
     intent_loss_fn,
     slot_loss_fn,
-    tokenizer, id2slots, slots2id
+    tokenizer,
+    id2slots,
+    slots2id,
 ):
+    """
+    Evaluate the performance of an intent and slot filling model on a given dataset.
+    Args:
+        model (IntentSlotModel): The model to evaluate.
+        dataloader (DataLoader): DataLoader providing the evaluation data.
+        intent_loss_fn (callable): Loss function for intent classification.
+        slot_loss_fn (callable): Loss function for slot filling.
+        tokenizer (Tokenizer): Tokenizer used to decode input_ids.
+        id2slots (dict): Mapping from slot IDs to slot labels.
+        slots2id (dict): Mapping from slot labels to slot IDs.
+    Returns:
+        tuple: A tuple containing:
+            - accuracy_intention (float): Accuracy of the intent classification.
+            - f1_slot (float): F1 score of the slot filling.
+            - total_loss (list): List of loss values for each batch.
+    """
+
     model.eval()
     total_loss = []
 
@@ -38,7 +79,9 @@ def eval_loop(
             slots_len = data["slots_len"]
 
             # Forward pass
-            intent_logits, slot_logits = model(input_ids, attention_mask, token_type_ids)
+            intent_logits, slot_logits = model(
+                input_ids, attention_mask, token_type_ids
+            )
             loss = calculate_loss(
                 intent_loss_fn=intent_loss_fn,
                 intent_logits=intent_logits,
@@ -46,7 +89,7 @@ def eval_loop(
                 slot_loss_fn=slot_loss_fn,
                 slot_logits=slot_logits,
                 slot_labels=slot_labels,
-                slots2id=slots2id
+                slots2id=slots2id,
             ).item()
             total_loss.append(loss)
 
@@ -60,10 +103,20 @@ def eval_loop(
 
             for i in range(input_ids.size(0)):
                 seq_length = slots_len[i]
-                utterance = tokenizer.tokenize(tokenizer.decode(input_ids[i].cpu().tolist(), include_special_tokens=False))[:seq_length]
+                utterance = tokenizer.tokenize(
+                    tokenizer.decode(
+                        input_ids[i].cpu().tolist(), include_special_tokens=False
+                    )
+                )[:seq_length]
 
-                tmp_ref = [(utterance[j], id2slots[slot_labels[i][j].item()]) for j in range(seq_length)]
-                tmp_hyp = [(utterance[j], id2slots[slot_hyp[i][j].item()]) for j in range(seq_length)]
+                tmp_ref = [
+                    (utterance[j], id2slots[slot_labels[i][j].item()])
+                    for j in range(seq_length)
+                ]
+                tmp_hyp = [
+                    (utterance[j], id2slots[slot_hyp[i][j].item()])
+                    for j in range(seq_length)
+                ]
 
                 ref_slots.append(tmp_ref)
                 hyp_slots.append(tmp_hyp)
@@ -75,9 +128,10 @@ def eval_loop(
             hyp_intents,
             output_dict=True,
             zero_division=False,
-        )['accuracy']
+        )["accuracy"]
 
         return accuracy_intention, f1_slot["total"]["f"], total_loss
+
 
 def train_loop(
     model: IntentSlotModel,
@@ -86,17 +140,36 @@ def train_loop(
     intent_loss_fn,
     slot_loss_fn,
     slots2id,
-    scheduler = None,
-    grad_clip = False
+    scheduler=None,
+    grad_clip=False,
 ):
+    """
+    Trains the given model for one epoch using the provided dataloader, optimizer, and loss functions.
+    Args:
+        model (IntentSlotModel): The model to be trained.
+        train_dataloader (DataLoader): DataLoader for the training data.
+        optimizer (torch.optim.Optimizer): Optimizer for updating model parameters.
+        intent_loss_fn (callable): Loss function for intent classification.
+        slot_loss_fn (callable): Loss function for slot filling.
+        slots2id (dict): Dictionary mapping slot labels to their corresponding IDs.
+        scheduler (torch.optim.lr_scheduler, optional): Learning rate scheduler. Defaults to None.
+        grad_clip (bool, optional): Whether to apply gradient clipping. Defaults to False.
+    Returns:
+        list: List of loss values for each batch.
+    """
+
     model.train()
 
     loss_array = []
-    batch_tqdm = tqdm(enumerate(train_dataloader), desc=f"Batch | Loss: {0:.4f}", leave=False)
+    batch_tqdm = tqdm(
+        enumerate(train_dataloader), desc=f"Batch | Loss: {0:.4f}", leave=False
+    )
 
     for _, data in batch_tqdm:
         optimizer.zero_grad()
-        intent_logits, slot_logits = model(data["input_ids"], data["attention_mask"], data["token_type_ids"])
+        intent_logits, slot_logits = model(
+            data["input_ids"], data["attention_mask"], data["token_type_ids"]
+        )
 
         loss = calculate_loss(
             intent_loss_fn=intent_loss_fn,
@@ -105,14 +178,14 @@ def train_loop(
             slot_loss_fn=slot_loss_fn,
             slot_logits=slot_logits,
             slot_labels=data["slots"],
-            slots2id=slots2id
+            slots2id=slots2id,
         )
 
         loss.backward()
         if grad_clip:
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
-        
+
         if scheduler is not None:
             scheduler.step()
 

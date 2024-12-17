@@ -33,15 +33,20 @@ class ModelIAS(nn.Module):
         )
 
         bidirectional_multiplier = 2 if model_config["bidirectional"] else 1
-        self.slot_out = nn.Linear(model_config["hid_size"] * bidirectional_multiplier, model_config["out_slot"])
-        self.intent_out = nn.Linear(model_config["hid_size"] * bidirectional_multiplier, model_config["out_int"])
+        self.slot_out = nn.Linear(
+            model_config["hid_size"] * bidirectional_multiplier,
+            model_config["out_slot"],
+        )
+        self.intent_out = nn.Linear(
+            model_config["hid_size"] * bidirectional_multiplier, model_config["out_int"]
+        )
 
-        self.dropout = nn.Dropout(self.config['emb_dropout'])
+        self.dropout = nn.Dropout(self.config["emb_dropout"])
 
     def forward(self, utterance, seq_lengths):
         utt_emb = self.embedding(utterance)
 
-        if self.config['emb_dropout'] > 0:
+        if self.config["emb_dropout"] > 0:
             utt_emb = self.dropout(utt_emb)
 
         packed_input = pack_padded_sequence(

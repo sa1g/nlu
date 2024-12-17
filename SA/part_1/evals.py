@@ -3,6 +3,7 @@ import numpy as np
 
 SMALL_POSITIVE_CONST = 1e-4
 
+
 def evaluate_ote(gold_ot, pred_ot):
     """
     evaluate the model performce for the ote task
@@ -17,9 +18,13 @@ def evaluate_ote(gold_ot, pred_ot):
     for i in range(n_samples):
         g_ot = gold_ot[i]
         p_ot = pred_ot[i]
-        g_ot_sequence, p_ot_sequence = tag2ot(ote_tag_sequence=g_ot), tag2ot(ote_tag_sequence=p_ot)
+        g_ot_sequence, p_ot_sequence = tag2ot(ote_tag_sequence=g_ot), tag2ot(
+            ote_tag_sequence=p_ot
+        )
         # hit number
-        n_hit_ot = match_ot(gold_ote_sequence=g_ot_sequence, pred_ote_sequence=p_ot_sequence)
+        n_hit_ot = match_ot(
+            gold_ote_sequence=g_ot_sequence, pred_ote_sequence=p_ot_sequence
+        )
         n_tp_ot += n_hit_ot
         n_gold_ot += len(g_ot_sequence)
         n_pred_ot += len(p_ot_sequence)
@@ -27,7 +32,9 @@ def evaluate_ote(gold_ot, pred_ot):
     # calculate precision, recall and f1 for ote task
     ot_precision = float(n_tp_ot) / float(n_pred_ot + SMALL_POSITIVE_CONST)
     ot_recall = float(n_tp_ot) / float(n_gold_ot + SMALL_POSITIVE_CONST)
-    ot_f1 = 2 * ot_precision * ot_recall / (ot_precision + ot_recall + SMALL_POSITIVE_CONST)
+    ot_f1 = (
+        2 * ot_precision * ot_recall / (ot_precision + ot_recall + SMALL_POSITIVE_CONST)
+    )
     ote_scores = (ot_precision, ot_recall, ot_f1)
     return ote_scores
 
@@ -48,9 +55,12 @@ def evaluate_ts(gold_ts, pred_ts):
     for i in range(n_samples):
         g_ts = gold_ts[i]
         p_ts = pred_ts[i]
-        g_ts_sequence, p_ts_sequence = tag2ts(ts_tag_sequence=g_ts), tag2ts(ts_tag_sequence=p_ts)
-        hit_ts_count, gold_ts_count, pred_ts_count = match_ts(gold_ts_sequence=g_ts_sequence,
-                                                              pred_ts_sequence=p_ts_sequence)
+        g_ts_sequence, p_ts_sequence = tag2ts(ts_tag_sequence=g_ts), tag2ts(
+            ts_tag_sequence=p_ts
+        )
+        hit_ts_count, gold_ts_count, pred_ts_count = match_ts(
+            gold_ts_sequence=g_ts_sequence, pred_ts_sequence=p_ts_sequence
+        )
 
         n_tp_ts += hit_ts_count
         n_gold_ts += gold_ts_count
@@ -62,7 +72,12 @@ def evaluate_ts(gold_ts, pred_ts):
         n_p_ts = n_pred_ts[i]
         ts_precision[i] = float(n_ts) / float(n_p_ts + SMALL_POSITIVE_CONST)
         ts_recall[i] = float(n_ts) / float(n_g_ts + SMALL_POSITIVE_CONST)
-        ts_f1[i] = 2 * ts_precision[i] * ts_recall[i] / (ts_precision[i] + ts_recall[i] + SMALL_POSITIVE_CONST)
+        ts_f1[i] = (
+            2
+            * ts_precision[i]
+            * ts_recall[i]
+            / (ts_precision[i] + ts_recall[i] + SMALL_POSITIVE_CONST)
+        )
 
     ts_macro_f1 = ts_f1.mean()
 
@@ -75,7 +90,9 @@ def evaluate_ts(gold_ts, pred_ts):
 
     ts_micro_p = float(n_tp_total) / (n_p_total + SMALL_POSITIVE_CONST)
     ts_micro_r = float(n_tp_total) / (n_g_total + SMALL_POSITIVE_CONST)
-    ts_micro_f1 = 2 * ts_micro_p * ts_micro_r / (ts_micro_p + ts_micro_r + SMALL_POSITIVE_CONST)
+    ts_micro_f1 = (
+        2 * ts_micro_p * ts_micro_r / (ts_micro_p + ts_micro_r + SMALL_POSITIVE_CONST)
+    )
     ts_scores = (ts_macro_f1, ts_micro_p, ts_micro_r, ts_micro_f1)
     return ts_scores
 
@@ -117,10 +134,10 @@ def match_ts(gold_ts_sequence, pred_ts_sequence):
     :return:
     """
     # positive, negative and neutral
-    tag2tagid = {'POS': 0, 'NEG': 1, 'NEU': 2}
+    tag2tagid = {"POS": 0, "NEG": 1, "NEU": 2}
     hit_count, gold_count, pred_count = np.zeros(3), np.zeros(3), np.zeros(3)
     for t in gold_ts_sequence:
-        #print(t)
+        # print(t)
         ts_tag = t[2]
         tid = tag2tagid[ts_tag]
         gold_count[tid] += 1
@@ -131,4 +148,3 @@ def match_ts(gold_ts_sequence, pred_ts_sequence):
             hit_count[tid] += 1
         pred_count[tid] += 1
     return hit_count, gold_count, pred_count
-

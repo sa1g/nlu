@@ -35,6 +35,25 @@ def load_config(config_file):
 
 
 def main(config: dict):
+    """
+    Main function to train and evaluate an Intent and Slot model for Natural Language Understanding (NLU).
+    Args:
+        config (dict): Configuration dictionary containing hyperparameters and settings.
+    The function performs the following steps:
+    1. Loads and preprocesses the training, development, and test datasets.
+    2. Initializes the tokenizer, datasets, and dataloaders.
+    3. Logs the shapes of the input tensors for debugging.
+    4. Sets up the TensorBoard writer for logging.
+    5. Initializes variables for tracking performance metrics and early stopping.
+    6. Runs multiple training iterations (runs) with the specified number of epochs.
+    7. Trains the model using the training loop and evaluates it on the development set.
+    8. Implements early stopping based on development loss.
+    9. Evaluates the best model on the test set and logs the results.
+    10. Saves the best model and optimizer state to a file.
+    Returns:
+        None
+    """
+
     train_raw, dev_raw, test_raw, slots2id, id2slots, intent2id, id2intent = (
         get_data_and_mapping()
     )
@@ -94,7 +113,7 @@ def main(config: dict):
 
         model = IntentSlotModel(len(slots2id), len(intent2id))
         model.to(get_device())
- 
+
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
         intent_loss_fn = torch.nn.CrossEntropyLoss()
         slot_loss_fn = torch.nn.CrossEntropyLoss(ignore_index=slots2id["pad"])
@@ -205,9 +224,9 @@ def main(config: dict):
 
 if __name__ == "__main__":
     # set seeds
-    # torch.manual_seed(42)
-    # np.random.seed(42)
-    # random.seed(42)
+    torch.manual_seed(42)
+    np.random.seed(42)
+    random.seed(42)
 
     args = parser.parse_args()
     config: dict = load_config(args.c)

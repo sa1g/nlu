@@ -24,6 +24,17 @@ logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.DEBUG)
 def main(
     train_config: dict, model_config: dict, optimizer_config: dict, device, PAD_TOKEN
 ):
+    """
+    Main function to set up data loaders, initialize TensorBoard writer, and start the training process.
+    Args:
+        train_config (dict): Configuration dictionary for training parameters, including dataset path and batch sizes.
+        model_config (dict): Configuration dictionary for model parameters, including embedding size, hidden size, and dropout rates.
+        optimizer_config (dict): Configuration dictionary for optimizer parameters.
+        device: The device (CPU or GPU) to be used for training.
+        PAD_TOKEN: The token used for padding sequences.
+    Returns:
+        None
+    """
 
     train_loader, dev_loader, test_loader, lang, w2id, slot2id, intent2id = (
         get_loaders_lang(
@@ -36,11 +47,9 @@ def main(
 
     # name = f"ModelIAS_emb_{model_config['emb_size']}_hid_{model_config['hid_size']}_edo_{model_config['emb_dropout']}_odo_{model_config['out_dropout']}_ido_{model_config['in_dropout']}_lay_{model_config['n_layers']}_bid_{model_config['bidirectional']}_{train_config['train_batch_size']}_{train_config['dev_batch_size']}_{train_config['test_batch_size']}"
     name = train_config["name"]
-    
+
     # TENSORBOARD
-    writer: SummaryWriter = SummaryWriter(
-        log_dir=f"log/{name}"
-    )
+    writer: SummaryWriter = SummaryWriter(log_dir=f"log/{name}")
 
     # Training
     train(
@@ -57,7 +66,7 @@ def main(
         writer=writer,
         PAD_TOKEN=PAD_TOKEN,
         name=name,
-        device=device
+        device=device,
     )
 
 

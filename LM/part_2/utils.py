@@ -3,6 +3,7 @@ import torch
 
 DEVICE = "cuda:0"
 
+
 def read_file(path: str, eos_token: str = "<eos>") -> list[str]:
     """
     Read a file and strip each letter inside of it.
@@ -15,11 +16,11 @@ def read_file(path: str, eos_token: str = "<eos>") -> list[str]:
 
 
 def get_vocab(corpus: list[str], special_tokens: list[str] = []) -> dict[int]:
-    """"
-    Analize a corpus (in this case a list of letters with 
+    """ "
+    Analize a corpus (in this case a list of letters with
     <eos> flag) and assign in an unique way an id to each other.
 
-    This transforms the corpus from a literal "dictionary" 
+    This transforms the corpus from a literal "dictionary"
     to a numeric, trainable one.
     """
 
@@ -48,11 +49,11 @@ class Lang:
         self.id2word = {v: k for k, v in self.word2id.items()}
 
     def get_vocab(self, corpus: list[str], special_tokens: list[str] = []) -> dict[int]:
-        """"
-        Analize a corpus (in this case a list of letters with 
+        """ "
+        Analize a corpus (in this case a list of letters with
         <eos> flag) and assign in an unique way an id to each other.
 
-        This transforms the corpus from a literal "dictionary" 
+        This transforms the corpus from a literal "dictionary"
         to a numeric, trainable one.
         """
 
@@ -72,12 +73,12 @@ class Lang:
 
 
 class PennTreeBank(data.Dataset):
-    def __init__(self, corpus:list[str], lang: Lang):
+    def __init__(self, corpus: list[str], lang: Lang):
         self.source = []
         self.target = []
 
         for sentence in corpus:
-            # Get from the first token till the second-last 
+            # Get from the first token till the second-last
             self.source.append(sentence.split()[0:-1])
             # Get from the second token till the last token
             self.target.append(sentence.split()[1:])
@@ -87,7 +88,7 @@ class PennTreeBank(data.Dataset):
 
     def __len__(self):
         return len(self.source)
-    
+
     def __getitem__(self, index) -> dict[torch.LongTensor]:
         src = torch.LongTensor(self.source_ids[index])
         trg = torch.LongTensor(self.target_ids[index])
@@ -95,7 +96,7 @@ class PennTreeBank(data.Dataset):
         sample = {"source": src, "target": trg}
         return sample
 
-    def mapping_seq(self, data: list[str, int] , lang: Lang) -> list[int]:
+    def mapping_seq(self, data: list[str, int], lang: Lang) -> list[int]:
         res = []
         for seq in data:
             tmp_seq = []
@@ -108,7 +109,7 @@ class PennTreeBank(data.Dataset):
                     break
             res.append(tmp_seq)
         return res
-    
+
 
 def collate_fn(data, pad_token):
     def merge(sequences):
@@ -120,8 +121,7 @@ def collate_fn(data, pad_token):
         # Pad token is zero in our case
         # So we create a matrix full of PAD_TOKEN (i.e. 0) with the shape
         # batch_size X maximum length of a sequence
-        padded_seqs = torch.LongTensor(
-            len(sequences), max_len).fill_(pad_token)
+        padded_seqs = torch.LongTensor(len(sequences), max_len).fill_(pad_token)
         for i, seq in enumerate(sequences):
             end = lengths[i]
             padded_seqs[i, :end] = seq  # We copy each sequence into the matrix

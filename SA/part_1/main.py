@@ -64,7 +64,6 @@ def main(config: dict):
         logging.debug(dataloader["token_type_ids"].shape)
         logging.debug(dataloader["slots"].shape)
 
-
         logging.debug(dataloader["input_ids"][0])
         logging.debug(dataloader["attention_mask"][0])
         logging.debug(dataloader["token_type_ids"][0])

@@ -15,6 +15,20 @@ def train_loop(
     scheduler=None,
     grad_clip=False,
 ):
+    """
+    Train the SlotModel for one epoch.
+    Args:
+        model (SlotModel): The model to be trained.
+        train_dataloader (DataLoader): DataLoader for the training data.
+        optimizer (Optimizer): Optimizer for updating the model parameters.
+        slot_loss_fn (function): Loss function for slot filling.
+        slots2id (dict): Dictionary mapping slot labels to their IDs.
+        scheduler (optional): Learning rate scheduler. Defaults to None.
+        grad_clip (bool, optional): Whether to apply gradient clipping. Defaults to False.
+    Returns:
+        list: List of loss values for each batch.
+    """
+
     model.train()
 
     loss_array = []
@@ -43,44 +57,24 @@ def train_loop(
 
     return loss_array
 
-# def eval_loop(
-#     model : SlotModel, 
-#     dataloader, 
-#     slot_loss_fn, 
-#     tokenizer, 
-#     id2slots, 
-#     slots2id
-# ):
-#     model.eval()
-#     total_loss =  []
 
-#     with torch.no_grad():
-        
-#         slot_hyp = []
-#         for data in dataloader:
-#             input_ids = data["input_ids"]
-#             attention_mask = data["attention_mask"]
-#             token_type_ids = data["token_type_ids"]
-#             slots = data["slots"]
-#             slots_len = data["slots_len"]
-
-#             slot_logits = model(input_ids, attention_mask, token_type_ids)
-#             loss = slot_loss_fn(slot_logits.view(-1, len(slots2id)), slots.view(-1)).item()
-#             total_loss.append(loss)
-
-#             slot_hyp.extend(torch.argmax(slot_logits, dim=2).cpu().tolist())
-
-#         ot_precision, ot_recall, ot_f1 = evaluate_ote(data["slots"].to('cpu'), slot_hyp)
-#     return ot_f1, ot_precision, ot_recall, total_loss
-
-def eval_loop(
-    model, 
-    dataloader, 
-    slot_loss_fn, 
-    tokenizer, 
-    id2slots, 
-    slots2id
-):
+def eval_loop(model, dataloader, slot_loss_fn, tokenizer, id2slots, slots2id):
+    """
+    Evaluates the model on the given dataloader and computes the slot filling performance.
+    Args:
+        model (torch.nn.Module): The model to evaluate.
+        dataloader (torch.utils.data.DataLoader): DataLoader providing the evaluation data.
+        slot_loss_fn (callable): Loss function for slot filling.
+        tokenizer (transformers.PreTrainedTokenizer): Tokenizer used for encoding the input data.
+        id2slots (dict): Dictionary mapping slot IDs to slot labels.
+        slots2id (dict): Dictionary mapping slot labels to slot IDs.
+    Returns:
+        tuple: A tuple containing:
+            - ot_f1 (float): F1 score for slot filling.
+            - ot_precision (float): Precision score for slot filling.
+            - ot_recall (float): Recall score for slot filling.
+            - total_loss (list): List of loss values for each batch.
+    """
     model.eval()
     total_loss = []
 
@@ -88,7 +82,7 @@ def eval_loop(
     all_pred_slots = []
 
     with torch.no_grad():
-        
+
         for data in dataloader:
             input_ids = data["input_ids"]
             attention_mask = data["attention_mask"]
@@ -97,7 +91,9 @@ def eval_loop(
             slots_len = data["slots_len"]
 
             slot_logits = model(input_ids, attention_mask, token_type_ids)
-            loss = slot_loss_fn(slot_logits.view(-1, len(slots2id)), slots.view(-1)).item()
+            loss = slot_loss_fn(
+                slot_logits.view(-1, len(slots2id)), slots.view(-1)
+            ).item()
             total_loss.append(loss)
 
             # Extract predictions
@@ -113,5 +109,5 @@ def eval_loop(
                 all_pred_slots.append(tmp_hyp)
 
     ot_precision, ot_recall, ot_f1 = evaluate_ote(all_true_slots, all_pred_slots)
-    
+
     return ot_f1, ot_precision, ot_recall, total_loss

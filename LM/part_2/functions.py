@@ -16,6 +16,24 @@ from model import LM_RNN, LM_LSTM
 
 
 def init_weights(mat):
+    """
+    Initialize the weights of the given model.
+    This function initializes the weights of the modules in the given model
+    using different strategies based on the type of the module. Specifically,
+    it handles GRU, LSTM, RNN, and Linear layers.
+    Args:
+        mat (torch.nn.Module): The model containing the modules whose weights
+                               need to be initialized.
+    Initialization strategies:
+        - For GRU, LSTM, and RNN layers:
+            - weight_ih: Xavier uniform initialization for each gate.
+            - weight_hh: Orthogonal initialization for each gate.
+            - bias: Fill with zeros.
+        - For Linear layers:
+            - weight: Uniform initialization in the range [-0.01, 0.01].
+            - bias: Fill with 0.01 if bias is not None.
+    """
+
     for m in mat.modules():
         if type(m) in [nn.GRU, nn.LSTM, nn.RNN]:
             for name, param in m.named_parameters():
@@ -37,6 +55,19 @@ def init_weights(mat):
 
 
 def train_loop(data, optimizer, criterion, model: torch.nn.Module, clip=5):
+    """
+    Trains the model for one epoch.
+    Args:
+        data (iterable): An iterable of samples, where each sample is a dictionary
+                         containing 'source', 'target', and 'number_tokens'.
+        optimizer (torch.optim.Optimizer): The optimizer used for training.
+        criterion (callable): The loss function.
+        model (torch.nn.Module): The model to be trained.
+        clip (float, optional): The maximum value to which gradients are clipped. Default is 5.
+    Returns:
+        float: The average loss per token over the dataset.
+    """
+
     model.train()
     loss_array = []
     number_of_tokens = []
@@ -56,6 +87,21 @@ def train_loop(data, optimizer, criterion, model: torch.nn.Module, clip=5):
 
 
 def eval_loop(data, eval_criterion, model):
+    """
+    Evaluates the model on the given data using the specified evaluation criterion.
+    Args:
+        data (iterable): An iterable of samples, where each sample is a dictionary containing:
+            - "source": The input data for the model.
+            - "target": The target data for the evaluation criterion.
+            - "number_tokens": The number of tokens in the sample.
+        eval_criterion (callable): A function that computes the loss between the model output and the target.
+        model (torch.nn.Module): The model to be evaluated.
+    Returns:
+        tuple: A tuple containing:
+            - ppl (float): The perplexity of the model on the given data.
+            - loss_to_return (float): The average loss over all samples.
+    """
+
     model.eval()
     loss_to_return = []
     loss_array = []
@@ -79,6 +125,17 @@ def get_loaders_lang(
     dev_batch_size: int = 128,
     test_batch_size: int = 128,
 ) -> list[DataLoader | Lang]:
+    """
+    Loads and prepares data loaders for training, validation, and testing datasets.
+    Args:
+        path (str): The directory path where the dataset files are located.
+        train_batch_size (int, optional): Batch size for the training data loader. Defaults to 128.
+        dev_batch_size (int, optional): Batch size for the validation data loader. Defaults to 128.
+        test_batch_size (int, optional): Batch size for the test data loader. Defaults to 128.
+    Returns:
+        list[DataLoader | Lang]: A list containing the training, validation, and test data loaders,
+                                 and the language object.
+    """
     logging.debug("Dataloading init")
 
     train_raw = read_file(f"{path}/ptb.train.txt")
@@ -115,6 +172,20 @@ def get_loaders_lang(
 
 
 def get_model(config: dict, device) -> nn.Module:
+    """
+    Initialize and return a language model based on the provided configuration.
+    Args:
+        config (dict): Configuration dictionary containing model parameters.
+            Expected keys:
+                - "model_type" (str): Type of the model to initialize.
+                  Supported values are "LM_RNN" and "LM_LSTM".
+        device: The device (CPU or GPU) on which the model will be allocated.
+    Returns:
+        nn.Module: The initialized language model.
+    Raises:
+        ValueError: If the model type specified in the config is not supported.
+    """
+
     if config["model_type"] == "LM_RNN":
         logging.debug("LM_RNN")
         model = LM_RNN(config).to(device)
@@ -131,6 +202,22 @@ def get_model(config: dict, device) -> nn.Module:
 
 
 def get_optimizer(model: nn.Module, config: dict = {}):
+    """
+    Returns the optimizer for the given model based on the provided configuration.
+    Args:
+        model (nn.Module): The neural network model for which the optimizer is to be created.
+        config (dict, optional): A dictionary containing the configuration for the optimizer.
+            - "optim_name" (str): The name of the optimizer to use. Supported values are "SGD", "AdamW", and "NTAvSGD".
+            - "lr" (float): The learning rate for the optimizer.
+            - "betas" (tuple, optional): Coefficients used for computing running averages of gradient and its square (only for AdamW).
+            - "eps" (float, optional): Term added to the denominator to improve numerical stability (only for AdamW).
+            - "weight_decay" (float, optional): Weight decay (L2 penalty) (only for AdamW).
+    Returns:
+        torch.optim.Optimizer: The optimizer initialized with the given configuration.
+    Raises:
+        SystemError: If the optimizer name in the configuration is not supported.
+    """
+
     if config["optim_name"] == "SGD":
         return optim.SGD(model.parameters(), lr=config["lr"])
     elif config["optim_name"] == "AdamW":
@@ -142,7 +229,9 @@ def get_optimizer(model: nn.Module, config: dict = {}):
             weight_decay=config["weight_decay"],
         )
     elif config["optim_name"] == "NTAvSGD":
-        rnn_modules = [module for module in model.modules() if isinstance(module, torch.nn.RNNBase)]
+        rnn_modules = [
+            module for module in model.modules() if isinstance(module, torch.nn.RNNBase)
+        ]
         return NTAvSGD(model.parameters(), lr=config["lr"], rnn_modules=rnn_modules)
 
     SystemError()
@@ -162,9 +251,23 @@ def train(
     patience: int = 5,
 ):
     """
-    TODO: add docs
-    Talk about early stopping, PPL and evaluation
+    Train a neural network model.
+    Args:
+        model (nn.Module): The neural network model to be trained.
+        optimizer_config (dict): Configuration dictionary for the optimizer.
+        lang (Lang): Language object containing word-to-id mappings.
+        writer: TensorBoard writer for logging.
+        n_epochs (int): Number of epochs to train the model.
+        clip (int): Gradient clipping value.
+        train_loader (DataLoader): DataLoader for the training dataset.
+        dev_loader (DataLoader): DataLoader for the development/validation dataset.
+        test_loader (DataLoader): DataLoader for the test dataset.
+        device (str, optional): Device to run the model on (default is "cpu").
+        patience (int, optional): Number of epochs to wait for improvement before early stopping (default is 5).
+    Returns:
+        None
     """
+
     criterion_train = torch.nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"])
     criterion_eval = torch.nn.CrossEntropyLoss(
         ignore_index=lang.word2id["<pad>"], reduction="sum"
@@ -239,19 +342,16 @@ def train(
     torch.save(best_model.state_dict(), path)
 
 
-# class NTAvSGD(optim.SGD):
-#     def __init__(self, params, lr=1e-3):
-#         super().__init__(params, lr=lr)
-
-#     def step(self):
-#         super().step()
-
-#     def trigger():
-#         pass
-
 class NTAvSGD(optim.SGD):
     def __init__(
-        self, params, lr=1e-3, momentum=0, dampening=0, weight_decay=0, nesterov=False, rnn_modules=None
+        self,
+        params,
+        lr=1e-3,
+        momentum=0,
+        dampening=0,
+        weight_decay=0,
+        nesterov=False,
+        rnn_modules=None,
     ):
         super(NTAvSGD, self).__init__(
             params, lr, momentum, dampening, weight_decay, nesterov
@@ -323,165 +423,3 @@ class NTAvSGD(optim.SGD):
             {k: v.clone() for k, v in avg_group.items()} for avg_group in avg_params
         ]
         super(NTAvSGD, self).load_state_dict(state_dict)
-
-
-# class NTAvSGD(optim.SGD):
-#     def __init__(self, params, lr=1e-3):
-#         super().__init__(params, lr)
-#         self.avg_params = []
-#         self.is_triggered = False
-
-#     def initialize_avg_params(self):
-#         self.avg_params = []
-#         for group in self.param_groups:
-#             avg_group = {}
-#             for param in group["params"]:
-#                 if param.requires_grad:
-#                     avg_group[param] = param.clone().detach()
-#             self.avg_params.append(avg_group)
-
-#     def update_avg_params(self):
-#         for avg_group, group in zip(self.avg_params, self.param_groups):
-#             for param in group["params"]:
-#                 if param.requires_grad:
-#                     avg_group[param].mul_(0.5).add_(param.data, alpha=0.5)
-
-#     def step(self, closure=None):
-#         loss = None
-#         if closure is not None:
-#             loss = closure()
-
-#         # Standard SGD step
-#         super().step(closure)
-
-#         # Initialize avg_params on first step
-#         if not self.avg_params:
-#             self.initialize_avg_params()
-
-#         # Update avg_params if triggered
-#         if self.is_triggered:
-#             self.update_avg_params()
-#             self.swap_params_with_avg()
-#             self.flatten_rnn_parameters()
-
-#     def trigger(self, state=True):
-#         print("TRIGGERED")
-#         self.is_triggered = state
-
-#     def swap_params_with_avg(self):
-#         if self.avg_params:
-#             for avg_group, group in zip(self.avg_params, self.param_groups):
-#                 for param in group["params"]:
-#                     if param.requires_grad:
-#                         param.data, avg_group[param] = avg_group[param], param.data
-
-#     def flatten_rnn_parameters(self):
-#         for group in self.param_groups:
-#             for param in group["params"]:
-#                 if hasattr(
-#                     param, "grad_fn"
-#                 ):  # Check if the parameter has a gradient function
-#                     parent_module = (
-#                         param.grad_fn.next_functions[0][0]
-#                         .variable._grad_fn._saved_tensors[0]
-#                         .grad_fn.next_functions[0][0]
-#                     )
-#                     if isinstance(parent_module, torch.nn.RNNBase):
-#                         parent_module.flatten_parameters()
-
-#     def state_dict(self):
-#         state_dict = super(NTAvSGD, self).state_dict()
-#         state_dict["avg_params"] = [
-#             {k: v.clone() for k, v in avg_group.items()}
-#             for avg_group in self.avg_params
-#         ]
-#         state_dict["is_triggered"] = self.is_triggered
-#         return state_dict
-
-#     def load_state_dict(self, state_dict):
-#         self.is_triggered = state_dict.pop("is_triggered")
-#         avg_params = state_dict.pop("avg_params")
-#         self.avg_params = [
-#             {k: v.clone() for k, v in avg_group.items()} for avg_group in avg_params
-#         ]
-#         super(NTAvSGD, self).load_state_dict(state_dict)
-
-
-# class NTAvSGD(optim.SGD):
-#     def __init__(
-#         self, params, lr=1e-3, momentum=0, dampening=0, weight_decay=0, nesterov=False
-#     ):
-#         super(NTAvSGD, self).__init__(
-#             params, lr, momentum, dampening, weight_decay, nesterov
-#         )
-#         self.avg_params = None
-#         self.is_triggered = False
-
-#     def initialize_avg_params(self):
-#         self.avg_params = []
-#         for group in self.param_groups:
-#             avg_group = {}
-#             for param in group["params"]:
-#                 if param.requires_grad:
-#                     avg_group[param] = torch.clone(param.data).detach()
-#             self.avg_params.append(avg_group)
-
-#     def update_avg_params(self):
-#         for avg_group, group in zip(self.avg_params, self.param_groups):
-#             for param in group["params"]:
-#                 if param.requires_grad:
-#                     avg_group[param].data.mul_(0.5).add_(param.data, alpha=0.5)
-
-#     def step(self, closure=None):
-#         loss = None
-#         if closure is not None:
-#             loss = closure()
-
-#         # Standard SGD step
-#         super().step()
-
-#         # Initialize avg_params on first step
-#         if self.avg_params is None:
-#             self.initialize_avg_params()
-
-#         # Update avg_params if triggered
-#         if self.is_triggered:
-#             self.update_avg_params()
-#             self.swap_params_with_avg()
-#             self.flatten_rnn_parameters()
-
-#     def trigger(self, state=True):
-#         self.is_triggered = state
-
-#     def swap_params_with_avg(self):
-#         if self.avg_params is not None:
-#             for avg_group, group in zip(self.avg_params, self.param_groups):
-#                 for param in group["params"]:
-#                     if param.requires_grad:
-#                         param.data, avg_group[param].data = (
-#                             avg_group[param].data,
-#                             param.data,
-#                         )
-
-#     def flatten_rnn_parameters(self):
-#         for group in self.param_groups:
-#             for param in group["params"]:
-#                 if isinstance(param, torch.nn.RNNBase):
-#                     param.flatten_parameters()
-
-#     def state_dict(self):
-#         state_dict = super(NTAvSGD, self).state_dict()
-#         state_dict["avg_params"] = [
-#             {k: v.clone() for k, v in avg_group.items()}
-#             for avg_group in self.avg_params
-#         ]
-#         state_dict["is_triggered"] = self.is_triggered
-#         return state_dict
-
-#     def load_state_dict(self, state_dict):
-#         self.is_triggered = state_dict.pop("is_triggered")
-#         avg_params = state_dict.pop("avg_params")
-#         self.avg_params = [
-#             {k: v.clone() for k, v in avg_group.items()} for avg_group in avg_params
-#         ]
-#         super(NTAvSGD, self).load_state_dict(state_dict)
