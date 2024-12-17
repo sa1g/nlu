@@ -262,6 +262,37 @@
         "n_epochs": 100,
         "clip": 5,
         "optim_name": "AdamW"
+    },
+    "Alstm_adam_001_drop_50": {
+        "model_type": "LM_LSTM",
+        "dataset_path": "../dataset",
+        "train_batch_size": 32,
+        "dev_batch_size": 32,
+        "test_batch_size": 32,
+        "emb_size": 300,
+        "hid_size": 300,
+        "n_layers": 1,
+        "lr": 0.001,
+        "weight_decay": 0,
+        "n_epochs": 100,
+        "clip": 5,
+        "optim_name": "AdamW",
+        "out_dropout": 0.5
+    },
+    "Alstm_adam_003_drop_50": {
+        "model_type": "LM_LSTM",
+        "dataset_path": "../dataset",
+        "train_batch_size": 32,
+        "dev_batch_size": 32,
+        "test_batch_size": 32,
+        "emb_size": 300,
+        "hid_size": 300,
+        "n_layers": 1,
+        "lr": 0.003,
+        "weight_decay": 0,
+        "n_epochs": 100,
+        "clip": 5,
+        "optim_name": "AdamW",
+        "out_dropout": 0.5
     }
-    
 }

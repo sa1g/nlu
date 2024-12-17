@@ -187,6 +187,57 @@
         "optim_name": "SGD",
         "weight_tying": true,
         "variational_dropout": 0.3
+    },
+    "wt10-vd01-NTAvSGD": {
+        "model_type": "LM_LSTM",
+        "dataset_path": "../dataset",
+        "train_batch_size": 64,
+        "dev_batch_size": 64,
+        "test_batch_size": 64,
+        "emb_size": 300,
+        "hid_size": 300,
+        "n_layers": 1,
+        "lr": 1,
+        "n_epochs": 100,
+        "clip": 5,
+        "optim_name": "NTAvSGD",
+        "weight_tying": true,
+        "variational_dropout": 0.1
+
+    },
+    "wt20-vd01-NTAvSGD": {
+        "model_type": "LM_LSTM",
+        "dataset_path": "../dataset",
+        "train_batch_size": 64,
+        "dev_batch_size": 64,
+        "test_batch_size": 64,
+        "emb_size": 300,
+        "hid_size": 300,
+        "n_layers": 1,
+        "lr": 2,
+        "n_epochs": 100,
+        "clip": 5,
+        "optim_name": "NTAvSGD",
+        "weight_tying": true,
+        "variational_dropout": 0.1
+
+    },
+    "wt30-vd01-NTAvSGD": {
+        "model_type": "LM_LSTM",
+        "dataset_path": "../dataset",
+        "train_batch_size": 64,
+        "dev_batch_size": 64,
+        "test_batch_size": 64,
+        "emb_size": 300,
+        "hid_size": 300,
+        "n_layers": 1,
+        "lr": 3,
+        "n_epochs": 100,
+        "clip": 5,
+        "optim_name": "NTAvSGD",
+        "weight_tying": true,
+        "variational_dropout": 0.1
+
     }
 }
 
