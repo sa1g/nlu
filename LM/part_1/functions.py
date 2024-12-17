@@ -121,13 +121,13 @@ def get_model(config: dict, device) -> nn.Module:
     elif config["model_type"] == "LM_LSTM":
         logging.debug("LM_LSTM")
         model = LM_LSTM(config).to(device)
-    elif config["model_type"] == "LM_LSTM_WS":
-        model = LM_LSTM_WS(config).to(device)
-    elif config["model_type"] == "LM_LSTM_VD":
-        model = LM_LSTM_VD(config).to(device)
+    # elif config["model_type"] == "LM_LSTM_WS":
+    #     model = LM_LSTM_WS(config).to(device)
+    # elif config["model_type"] == "LM_LSTM_VD":
+    #     model = LM_LSTM_VD(config).to(device)
 
-    if init_weights:
-        model.apply(config["init_weights"])
+    # if init_weights:
+    model.apply(init_weights)
 
     return model
 

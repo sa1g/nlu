@@ -1,0 +1,24 @@
+{
+    "full-16-5e-5": {
+        "train_batch_size": 16,
+        "dev_batch_size": 16,
+        "test_batch_size": 16,
+        "grad_clip": true,
+        "scheduler": true,
+        "epochs": 100,
+        "runs": 1,
+        "lr": 0.00002
+    },
+    "full-32-5e-5": {
+        "train_batch_size": 32,
+        "dev_batch_size": 32,
+        "test_batch_size": 32,
+        "grad_clip": true,
+        "scheduler": true,
+        "epochs": 100,
+        "runs": 1,
+        "lr": 0.00002
+    }
+
+
+}

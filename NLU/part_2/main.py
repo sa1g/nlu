@@ -2,6 +2,7 @@ import copy
 import json
 import logging
 import os
+import random
 from matplotlib import pyplot as plt
 import numpy as np
 import torch
@@ -34,13 +35,14 @@ def load_config(config_file):
 
 
 def main(config: dict):
-    train_raw, dev_raw, test_raw, slots2id, id2slots, intent2id, id2intent = get_data_and_mapping()
+    train_raw, dev_raw, test_raw, slots2id, id2slots, intent2id, id2intent = (
+        get_data_and_mapping()
+    )
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     processed_train = preprocess_data(train_raw, tokenizer, slots2id, intent2id)
     processed_test = preprocess_data(test_raw, tokenizer, slots2id, intent2id)
     processed_dev = preprocess_data(dev_raw, tokenizer, slots2id, intent2id)
-
 
     train_dataset = ATISDataset(processed_train)
     test_dataset = ATISDataset(processed_test)
@@ -72,9 +74,12 @@ def main(config: dict):
     writer: SummaryWriter = SummaryWriter(log_dir=f"log/{name}")
 
     accuracy, f1, loss = 0, 0, [float("inf")]
+    accuracies, f1s, dev_losses = [], [], []
 
     best_model = None
     best_f1 = 0
+
+    early_stopping_counter = 0
 
     for r in tqdm(range(config["runs"]), desc="Runs"):
         train_dataloader = torch.utils.data.DataLoader(
@@ -89,8 +94,8 @@ def main(config: dict):
 
         model = IntentSlotModel(len(slots2id), len(intent2id))
         model.to(get_device())
-
-        optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
+ 
+        optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
         intent_loss_fn = torch.nn.CrossEntropyLoss()
         slot_loss_fn = torch.nn.CrossEntropyLoss(ignore_index=slots2id["pad"])
 
@@ -152,8 +157,17 @@ def main(config: dict):
             writer.add_scalar("F1/dev", f1, epoch)
             writer.add_scalar("Accuracy/dev", accuracy, epoch)
 
+            # Early stopping with a patience of 5, using the counter
+            if len(dev_losses) > 5 and dev_losses[-1] > dev_losses[-2]:
+                early_stopping_counter += 1
+            else:
+                early_stopping_counter = 0
+
+            if early_stopping_counter >= 5:
+                break
+
         accuracy, f1, loss = eval_loop(
-            model,
+            best_model.to(get_device()),
             test_dataloader,
             intent_loss_fn,
             slot_loss_fn,
@@ -166,14 +180,21 @@ def main(config: dict):
         writer.add_scalar("Accuracy/test", accuracy, r)
         writer.add_scalar("Loss/test", sum(loss) / len(loss), r)
 
+        accuracies.append(accuracy)
+        f1s.append(f1)
+        dev_losses.append(sum(loss) / len(loss))
 
         print(
             f"Accuracy: {accuracy:.4f} - F1: {f1:.4f} - Loss: {sum(loss)/len(loss):.4f}"
         )
 
+    # writer.add_scalar("F1/test", np.array(f1s).mean(), r)
+    # writer.add_scalar("Accuracy/test", np.array(accuracies).mean(), r)
+    # writer.add_scalar("Loss/test", np.array(dev_losses).mean(), r)
+
     PATH = f"bin/{name}.pt"
     saving_object = {
-        "model": best_model.state_dict(),
+        "model": best_model.to("cpu").state_dict(),
         "optimizer": optimizer.state_dict(),
         "slot2id": slots2id,
         "intent2id": intent2id,
@@ -183,6 +204,11 @@ def main(config: dict):
 
 
 if __name__ == "__main__":
+    # set seeds
+    # torch.manual_seed(42)
+    # np.random.seed(42)
+    # random.seed(42)
+
     args = parser.parse_args()
     config: dict = load_config(args.c)
 
@@ -201,6 +227,7 @@ if __name__ == "__main__":
             "epochs": config.get("epochs", 6),
             "grad_clip": config.get("grad_clip", True),
             "scheduler": config.get("scheduler", True),
+            "lr": config.get("lr", 5e-5),
         }
 
         main(config)

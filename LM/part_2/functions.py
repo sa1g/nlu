@@ -124,8 +124,8 @@ def get_model(config: dict, device) -> nn.Module:
     else:
         raise ValueError("Model not found")
 
-    if init_weights:
-        model.apply(config["init_weights"])
+    # if init_weights:
+    model.apply(init_weights)
 
     return model
 

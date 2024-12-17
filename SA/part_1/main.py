@@ -163,6 +163,15 @@ def main(config: dict):
         writer.add_scalar("Precision/test", precision, r)
         writer.add_scalar("Recall/test", recall, r)
 
+        rolling_f1.append(f1)
+        rolling_prec.append(precision)
+        rolling_recall.append(recall)
+        # rolling_loss.append(loss)
+
+    writer.add_scalar("F1/test/mean", np.mean(rolling_f1), 0)
+    writer.add_scalar("Precision/test/mean", np.mean(rolling_prec), 0)
+    writer.add_scalar("Recall/test/mean", np.mean(rolling_recall), 0)
+
     PATH = f"bin/{name}.pt"
     saving_object = {
         "model": best_model.state_dict(),

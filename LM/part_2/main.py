@@ -1,3 +1,7 @@
+import random
+
+import numpy as np
+import torch
 from functions import (
     get_model,
     get_optimizer,
@@ -67,6 +71,10 @@ def load_config(config_file):
 
 
 if __name__ == "__main__":
+    torch.manual_seed(42)
+    np.random.seed(42)
+    random.seed(42)
+    
     DEVICE = "cuda:0"
 
     args = parser.parse_args()

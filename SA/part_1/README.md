@@ -13,5 +13,3 @@ Implement a model based on  Pre-trained Language model (such as BERT or RoBERTa)
 To do this exercise you can adapt the model and the code that you develop for intent classification and slot filling tasks.
 
 - that's correct in the third assignment you are asked to perform the task of aspect terms extraction only. And, yes, the evaluation has to be done with evaluate_ote.
-
-

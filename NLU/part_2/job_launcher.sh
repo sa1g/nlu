@@ -19,7 +19,7 @@ source /home/ettore.saggiorato/miniconda3/bin/activate
 conda activate NLU
 
 echo "Training"
-cd /home/ettore.saggiorato/natural-language-understanding/NLU/part_1/
-python3 main.py
+cd /home/ettore.saggiorato/natural-language-understanding/NLU/part_2/
+python3 main.py -c new_config_first_block.json
 
 echo "Done"

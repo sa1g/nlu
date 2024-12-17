@@ -23,3 +23,6 @@ cd /home/ettore.saggiorato/natural-language-understanding/SA/part_1/
 python3 main.py
 
 echo "Done"
+
+
+         
