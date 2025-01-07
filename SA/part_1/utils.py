@@ -13,48 +13,11 @@ def load_data(path):
         """
         Extraction of the aspect terms only
         """
-        # """
-        # Convert tags to B, I, E, S, O format.
-        # """
         new_tags = []
-        # n_tags = len(tags)
-
-        # i = 0
-        # while i < n_tags:
-        #     if tags[i] == "O":
-        #         new_tags.append("O")
-        #         i += 1
-        #     else:
-        #         if i + 1 < n_tags and tags[i + 1] == tags[i]:
-        #             new_tags.append("B")
-        #             i += 1
-        #             while i < n_tags and tags[i] == tags[i - 1]:
-        #                 if i + 1 < n_tags and tags[i + 1] == tags[i]:
-        #                     new_tags.append("I")
-        #                 else:
-        #                     new_tags.append("E")
-        #                 i += 1
-        #         else:
-        #             new_tags.append("S")
-        #             i += 1
-
-        # new_tags = []
-
-        # for tag in tags:
-        #     if tag == "O":
-        #         new_tags.append("O")
-        #     elif tag == "T-POS" or tag == "T-NEG" or tag == "T-NEU":
-        #         new_tags.append("T")
-        #     # else:
-        #     #     # error
-        #     #     raise ValueError(f"Unknown tag: {tag}")
 
         n_tags = len(tags)
         i = 0
         while i < n_tags:
-            # if tags[i] == "O":
-            # new_tags.append("O")
-            # i += 1
             if tags[i] == "T-POS" or tags[i] == "T-NEG" or tags[i] == "T-NEU":
                 new_tags.append("T")
                 i += 1
