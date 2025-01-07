@@ -148,6 +148,8 @@ def main(config: dict):
                 best_model = copy.deepcopy(model).to("cpu")
             # continue 160
 
+            
+
             writer.add_scalar("Loss/train", train_losses[-1], epoch)
             writer.add_scalar("Loss/dev", dev_losses[-1], epoch)
             writer.add_scalar("F1/dev", f1, epoch)

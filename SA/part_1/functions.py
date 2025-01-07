@@ -1,7 +1,7 @@
 # Add the class of your model only
 # Here is where you define the architecture of your model using pytorch
 import torch
-from utils import evaluate_ote
+from utils import evaluate_ts
 from model import SlotModel
 from tqdm import tqdm
 
@@ -83,7 +83,7 @@ def eval_loop(model, dataloader, slot_loss_fn, tokenizer, id2slots, slots2id):
 
     with torch.no_grad():
 
-        for data in dataloader:
+        for i, data in enumerate(dataloader):
             input_ids = data["input_ids"]
             attention_mask = data["attention_mask"]
             token_type_ids = data["token_type_ids"]
@@ -108,6 +108,19 @@ def eval_loop(model, dataloader, slot_loss_fn, tokenizer, id2slots, slots2id):
                 all_true_slots.append(tmp_ref)
                 all_pred_slots.append(tmp_hyp)
 
-    ot_precision, ot_recall, ot_f1 = evaluate_ote(all_true_slots, all_pred_slots)
+            # print the first sample and model output
+            # if len(all_true_slots) == 1:
+            print("\n\n\n")
+            print("Input Text:")
+            print(tokenizer.decode(input_ids[-1]))
+            print("\n\nTrue Slots:")
+            print(tmp_ref)
+            print("\n\nPredicted Slots:")
+            print(tmp_hyp)
+            print("-------------------------")
+            # exit()
+
+
+    ot_precision, ot_recall, ot_f1 = evaluate_ts(all_true_slots, all_pred_slots)
 
     return ot_f1, ot_precision, ot_recall, total_loss

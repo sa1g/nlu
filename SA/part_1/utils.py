@@ -1,6 +1,7 @@
 # Add functions or classes used for data loading and preprocessing
 import os
 from collections import Counter
+import numpy as np
 from sklearn.model_selection import train_test_split
 import logging
 import torch
@@ -8,31 +9,59 @@ from transformers import BertTokenizer, get_linear_schedule_with_warmup
 
 
 def load_data(path):
-    def convert_tags(tags):
+    def convert_tags(tags: list):
         """
-        Convert tags to B, I, E, S, O format.
+        Extraction of the aspect terms only
         """
+        # """
+        # Convert tags to B, I, E, S, O format.
+        # """
         new_tags = []
-        n_tags = len(tags)
+        # n_tags = len(tags)
 
+        # i = 0
+        # while i < n_tags:
+        #     if tags[i] == "O":
+        #         new_tags.append("O")
+        #         i += 1
+        #     else:
+        #         if i + 1 < n_tags and tags[i + 1] == tags[i]:
+        #             new_tags.append("B")
+        #             i += 1
+        #             while i < n_tags and tags[i] == tags[i - 1]:
+        #                 if i + 1 < n_tags and tags[i + 1] == tags[i]:
+        #                     new_tags.append("I")
+        #                 else:
+        #                     new_tags.append("E")
+        #                 i += 1
+        #         else:
+        #             new_tags.append("S")
+        #             i += 1
+
+        # new_tags = []
+
+        # for tag in tags:
+        #     if tag == "O":
+        #         new_tags.append("O")
+        #     elif tag == "T-POS" or tag == "T-NEG" or tag == "T-NEU":
+        #         new_tags.append("T")
+        #     # else:
+        #     #     # error
+        #     #     raise ValueError(f"Unknown tag: {tag}")
+
+        n_tags = len(tags)
         i = 0
         while i < n_tags:
-            if tags[i] == "O":
-                new_tags.append("O")
+            # if tags[i] == "O":
+                # new_tags.append("O")
+                # i += 1
+            if tags[i] == "T-POS" or tags[i] == "T-NEG" or tags[i] == "T-NEU":
+                new_tags.append("T")
                 i += 1
             else:
-                if i + 1 < n_tags and tags[i + 1] == tags[i]:
-                    new_tags.append("B")
-                    i += 1
-                    while i < n_tags and tags[i] == tags[i - 1]:
-                        if i + 1 < n_tags and tags[i + 1] == tags[i]:
-                            new_tags.append("I")
-                        else:
-                            new_tags.append("E")
-                        i += 1
-                else:
-                    new_tags.append("S")
-                    i += 1
+                new_tags.append("O")
+                i += 1
+
         return new_tags
 
     raw_data = []
@@ -73,7 +102,9 @@ def load_data(path):
                 print(f"Error processing line: {line}")
                 print(e)
 
-        print("Error: ", error)
+        if error != 0:
+            print("Error: ", error)
+
         return raw_data
 
 
@@ -149,6 +180,7 @@ def get_data_and_mapping(
 
     slots2id = {"pad": 0}
     id2slots = {0: "pad"}
+
     for slot in slots_set:
         slots2id[slot] = len(slots2id)
         id2slots[len(id2slots)] = slot
@@ -315,74 +347,76 @@ class ATISDataset(torch.utils.data.Dataset):
 
 SMALL_POSITIVE_CONST = 1e-4
 
-
-def tag2ot(ote_tag_sequence):
+def tag2ts(ts_tag_sequence):
     """
-    transform ote tag sequence to a sequence of opinion target
-    :param ote_tag_sequence: tag sequence for ote task
-    :return:
+    Transform ts tag sequence to target spans
+    :param ts_tag_sequence: tag sequence with 'T' and 'O'
+    :return: List of (start, end) tuples for target spans
     """
-    n_tags = len(ote_tag_sequence)
-    ot_sequence = []
+    n_tags = len(ts_tag_sequence)
+    ts_sequence = []
     beg, end = -1, -1
     for i in range(n_tags):
-        tag = ote_tag_sequence[i]
-        if tag == "S":
-            ot_sequence.append((i, i))
-        elif tag == "B":
-            beg = i
-        elif tag == "E":
+        ts_tag = ts_tag_sequence[i]
+        if ts_tag == "T":
+            if beg == -1:
+                beg = i
             end = i
-            if end > beg > -1:
-                ot_sequence.append((beg, end))
-                beg, end = -1, -1
-    return ot_sequence
+        elif ts_tag == "O" and beg != -1:
+            ts_sequence.append((beg, end))
+            beg, end = -1, -1
+    if beg != -1:
+        ts_sequence.append((beg, end))
+    return ts_sequence
 
 
-def match_ot(gold_ote_sequence, pred_ote_sequence):
+def match_ts(gold_ts_sequence, pred_ts_sequence):
     """
-    calculate the number of correctly predicted opinion target
-    :param gold_ote_sequence: gold standard opinion target sequence
-    :param pred_ote_sequence: predicted opinion target sequence
-    :return: matched number
+    Calculate the number of correctly predicted target spans
+    :param gold_ts_sequence: gold standard target spans
+    :param pred_ts_sequence: predicted target spans
+    :return: hit_count, gold_count, pred_count
     """
-    n_hit = 0
-    for t in pred_ote_sequence:
-        if t in gold_ote_sequence:
-            n_hit += 1
-    return n_hit
+    hit_count = 0
+    gold_count = len(gold_ts_sequence)
+    pred_count = len(pred_ts_sequence)
+
+    for t in pred_ts_sequence:
+        if t in gold_ts_sequence:
+            hit_count += 1
+
+    return hit_count, gold_count, pred_count
 
 
-def evaluate_ote(gold_ot, pred_ot):
+def evaluate_ts(gold_ts, pred_ts):
     """
-    evaluate the model performce for the ote task
-    :param gold_ot: gold standard ote tags
-    :param pred_ot: predicted ote tags
-    :return:
+    Evaluate the model performance for the binary tagging task
+    :param gold_ts: gold standard ts tags
+    :param pred_ts: predicted ts tags
+    :return: Precision, Recall, F1 scores
+
+    Adapted from: 
+    https://github.com/lixin4ever/E2E-TBSA/blob/master/evals.py#L51
     """
-    assert len(gold_ot) == len(pred_ot)
-    n_samples = len(gold_ot)
-    # number of true positive, gold standard, predicted opinion targets
-    n_tp_ot, n_gold_ot, n_pred_ot = 0, 0, 0
+    assert len(gold_ts) == len(pred_ts)
+    n_samples = len(gold_ts)
+
+    n_tp_ts, n_gold_ts, n_pred_ts = 0, 0, 0
+
     for i in range(n_samples):
-        g_ot = gold_ot[i]
-        p_ot = pred_ot[i]
-        g_ot_sequence, p_ot_sequence = tag2ot(ote_tag_sequence=g_ot), tag2ot(
-            ote_tag_sequence=p_ot
+        g_ts_sequence = tag2ts(ts_tag_sequence=gold_ts[i])
+        p_ts_sequence = tag2ts(ts_tag_sequence=pred_ts[i])
+
+        hit_ts_count, gold_ts_count, pred_ts_count = match_ts(
+            gold_ts_sequence=g_ts_sequence, pred_ts_sequence=p_ts_sequence
         )
-        # hit number
-        n_hit_ot = match_ot(
-            gold_ote_sequence=g_ot_sequence, pred_ote_sequence=p_ot_sequence
-        )
-        n_tp_ot += n_hit_ot
-        n_gold_ot += len(g_ot_sequence)
-        n_pred_ot += len(p_ot_sequence)
-    # add 0.001 for smoothing
-    # calculate precision, recall and f1 for ote task
-    ot_precision = float(n_tp_ot) / float(n_pred_ot + SMALL_POSITIVE_CONST)
-    ot_recall = float(n_tp_ot) / float(n_gold_ot + SMALL_POSITIVE_CONST)
-    ot_f1 = (
-        2 * ot_precision * ot_recall / (ot_precision + ot_recall + SMALL_POSITIVE_CONST)
-    )
-    ote_scores = (ot_precision, ot_recall, ot_f1)
-    return ote_scores
+
+        n_tp_ts += hit_ts_count
+        n_gold_ts += gold_ts_count
+        n_pred_ts += pred_ts_count
+
+    precision = float(n_tp_ts) / (n_pred_ts + SMALL_POSITIVE_CONST)
+    recall = float(n_tp_ts) / (n_gold_ts + SMALL_POSITIVE_CONST)
+    f1_score = 2 * precision * recall / (precision + recall + SMALL_POSITIVE_CONST)
+
+    return precision, recall, f1_score
