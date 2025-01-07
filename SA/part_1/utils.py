@@ -53,8 +53,8 @@ def load_data(path):
         i = 0
         while i < n_tags:
             # if tags[i] == "O":
-                # new_tags.append("O")
-                # i += 1
+            # new_tags.append("O")
+            # i += 1
             if tags[i] == "T-POS" or tags[i] == "T-NEG" or tags[i] == "T-NEU":
                 new_tags.append("T")
                 i += 1
@@ -347,6 +347,7 @@ class ATISDataset(torch.utils.data.Dataset):
 
 SMALL_POSITIVE_CONST = 1e-4
 
+
 def tag2ts(ts_tag_sequence):
     """
     Transform ts tag sequence to target spans
@@ -395,7 +396,7 @@ def evaluate_ts(gold_ts, pred_ts):
     :param pred_ts: predicted ts tags
     :return: Precision, Recall, F1 scores
 
-    Adapted from: 
+    Adapted from:
     https://github.com/lixin4ever/E2E-TBSA/blob/master/evals.py#L51
     """
     assert len(gold_ts) == len(pred_ts)

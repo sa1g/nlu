@@ -108,19 +108,6 @@ def eval_loop(model, dataloader, slot_loss_fn, tokenizer, id2slots, slots2id):
                 all_true_slots.append(tmp_ref)
                 all_pred_slots.append(tmp_hyp)
 
-            # print the first sample and model output
-            # if len(all_true_slots) == 1:
-            print("\n\n\n")
-            print("Input Text:")
-            print(tokenizer.decode(input_ids[-1]))
-            print("\n\nTrue Slots:")
-            print(tmp_ref)
-            print("\n\nPredicted Slots:")
-            print(tmp_hyp)
-            print("-------------------------")
-            # exit()
-
-
     ot_precision, ot_recall, ot_f1 = evaluate_ts(all_true_slots, all_pred_slots)
 
     return ot_f1, ot_precision, ot_recall, total_loss
