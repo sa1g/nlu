@@ -3,20 +3,20 @@ import torch.nn as nn
 import logging
 
 
-def variational_dropout(x, mask):
-    """
-    Applies variational dropout to the input tensor `x` using the provided `mask`.
-    Variational dropout is a type of dropout where the same dropout mask is applied
-    across the entire input tensor, rather than applying a different mask to each element.
-    Args:
-        x (torch.Tensor): The input tensor to which dropout will be applied.
-        mask (torch.Tensor): The dropout mask tensor. It should be broadcastable to the shape of `x`.
-    Returns:
-        torch.Tensor: The input tensor `x` after applying the dropout mask.
-    """
-    mask = mask.expand_as(x)
+# def variational_dropout(x, mask):
+#     """
+#     Applies variational dropout to the input tensor `x` using the provided `mask`.
+#     Variational dropout is a type of dropout where the same dropout mask is applied
+#     across the entire input tensor, rather than applying a different mask to each element.
+#     Args:
+#         x (torch.Tensor): The input tensor to which dropout will be applied.
+#         mask (torch.Tensor): The dropout mask tensor. It should be broadcastable to the shape of `x`.
+#     Returns:
+#         torch.Tensor: The input tensor `x` after applying the dropout mask.
+#     """
+#     mask = mask.expand_as(x)
 
-    return x * mask
+#     return x * mask
 
 
 class LM_RNN(nn.Module):
@@ -80,7 +80,7 @@ class LM_LSTM(nn.Module):
 
         super().__init__()
 
-        self.name = f"{self.__class__.__name__}_emb_{config['emb_size']}_hid_{config['hid_size']}_edr_{config['emb_dropout']}_odr_{config['out_dropout']}_lay_{config['n_layers']}_weight_tying_{config['weight_tying']}__variational_dropout_{config['variational_dropout']}_optim_{config['optim_name']}"
+        self.name = f"{self.__class__.__name__}_emb_{config['emb_size']}_hid_{config['hid_size']}_edr_{config['emb_dropout']}_odr_{config['out_dropout']}_lay_{config['n_layers']}_weight_tying_{config['weight_tying']}_optim_{config['optim_name']}"
         logging.debug("LM_LSTM")
 
         self.embedding = nn.Embedding(
@@ -105,8 +105,8 @@ class LM_LSTM(nn.Module):
         self.output = nn.Linear(config["hid_size"], config["output_size"])
 
         # if there's variational dropout manage it
-        if config["variational_dropout"] != 0:
-            self.var_dropout_perc = config["variational_dropout"]
+        # if config["variational_dropout"] != 0:
+        #     self.var_dropout_perc = config["variational_dropout"]
 
         # Enable/disable weight share
         if config["weight_tying"]:
@@ -126,16 +126,16 @@ class LM_LSTM(nn.Module):
         if self.config["emb_dropout"] != 0:
             emb = self.emb_dropout(emb)
 
-        if self.config["variational_dropout"] != 0:
-            emb = variational_dropout(emb, mask)
+        # if self.config["variational_dropout"] != 0:
+        #     emb = variational_dropout(emb, mask)
 
         rnn, _ = self.rnn(emb)
 
         if self.config["out_dropout"] != 0:
             rnn = self.out_dropout(rnn)
 
-        if self.config["variational_dropout"] != 0:
-            rnn = variational_dropout(rnn, mask)
+        # if self.config["variational_dropout"] != 0:
+        #     rnn = variational_dropout(rnn, mask)
 
         out = self.output(rnn)
         out = out.permute(0, 2, 1)

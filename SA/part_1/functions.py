@@ -12,6 +12,7 @@ def train_loop(
     optimizer,
     slot_loss_fn,
     slots2id,
+    id2slots,
     scheduler=None,
     grad_clip=False,
 ):

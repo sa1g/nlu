@@ -1,3 +1,4 @@
+from collections import Counter
 from sklearn.metrics import classification_report
 from tqdm import tqdm
 from conll import evaluate
@@ -6,6 +7,7 @@ from model import IntentSlotModel
 
 
 def calculate_loss(
+    data,
     intent_loss_fn,
     slot_loss_fn,
     intent_logits,
@@ -13,6 +15,8 @@ def calculate_loss(
     intent_labels,
     slot_labels,
     slots2id,
+    id2slots,
+    id2intent,
 ):
     """
     Calculate the combined loss for intent classification and slot filling.
@@ -28,10 +32,32 @@ def calculate_loss(
         torch.Tensor: Combined loss for intent classification and slot filling.
     """
 
-    intent_loss = intent_loss_fn(intent_logits, intent_labels)
-    slot_loss = slot_loss_fn(slot_logits.view(-1, len(slots2id)), slot_labels.view(-1))
+    intent_count = Counter(data["intent"].tolist())
+    intent_weights = (
+        torch.tensor([1 / (intent_count[x] + 1) for x in id2intent.keys()])
+        .float()
+        .to("cuda")
+    )
+    criterion_intents = torch.nn.CrossEntropyLoss(weight=intent_weights)
 
-    return intent_loss + slot_loss
+    slot_count = Counter(data["slots"].flatten().tolist())
+    slot_weights = (
+        torch.tensor([1 / (slot_count[x] + 1) for x in id2slots.keys()])
+        .float()
+        .to("cuda")
+    )
+    criterion_slots = torch.nn.CrossEntropyLoss(
+        weight=slot_weights, ignore_index=slots2id["pad"]
+    )
+
+    loss_intent = criterion_intents(intent_logits, intent_labels)
+    loss_slot = criterion_slots(
+        slot_logits.view(-1, len(slots2id)), slot_labels.view(-1)
+    )
+
+    loss = loss_intent + loss_slot
+
+    return loss
 
 
 def eval_loop(
@@ -42,6 +68,7 @@ def eval_loop(
     tokenizer,
     id2slots,
     slots2id,
+    id2intent,
 ):
     """
     Evaluate the performance of an intent and slot filling model on a given dataset.
@@ -83,6 +110,7 @@ def eval_loop(
                 input_ids, attention_mask, token_type_ids
             )
             loss = calculate_loss(
+                data=data,
                 intent_loss_fn=intent_loss_fn,
                 intent_logits=intent_logits,
                 intent_labels=intent_labels,
@@ -90,6 +118,8 @@ def eval_loop(
                 slot_logits=slot_logits,
                 slot_labels=slot_labels,
                 slots2id=slots2id,
+                id2slots=id2slots,
+                id2intent=id2intent,
             ).item()
             total_loss.append(loss)
 
@@ -140,6 +170,9 @@ def train_loop(
     intent_loss_fn,
     slot_loss_fn,
     slots2id,
+    id2slots,
+    id2intent,
+    tokenizer,
     scheduler=None,
     grad_clip=False,
 ):
@@ -172,6 +205,7 @@ def train_loop(
         )
 
         loss = calculate_loss(
+            data=data,
             intent_loss_fn=intent_loss_fn,
             intent_logits=intent_logits,
             intent_labels=data["intent"],
@@ -179,6 +213,8 @@ def train_loop(
             slot_logits=slot_logits,
             slot_labels=data["slots"],
             slots2id=slots2id,
+            id2slots=id2slots,
+            id2intent=id2intent,
         )
 
         loss.backward()

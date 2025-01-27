@@ -97,6 +97,7 @@ def main(config: dict):
 
     best_model = None
     best_f1 = 0
+    pat = config["patience"]
 
     early_stopping_counter = 0
 
@@ -125,6 +126,7 @@ def main(config: dict):
                 num_warmup_steps=warmup_steps,
                 num_training_steps=len(train_dataloader) * config["epochs"],
             )
+
         else:
             scheduler = None
 
@@ -137,6 +139,8 @@ def main(config: dict):
             leave=False,
         )
 
+        
+
         for epoch in epochs_tqdm:
             t_loss = train_loop(
                 model,
@@ -145,8 +149,12 @@ def main(config: dict):
                 intent_loss_fn,
                 slot_loss_fn,
                 slots2id,
+                id2slots,
+                id2intent,
+                tokenizer,
                 scheduler,
                 config["grad_clip"],
+
             )
 
             train_losses.append(np.asarray(t_loss).mean())
@@ -159,6 +167,7 @@ def main(config: dict):
                 tokenizer,
                 id2slots,
                 slots2id,
+                id2intent,
             )
 
             dev_losses.append(np.asarray(loss).mean())
@@ -170,6 +179,12 @@ def main(config: dict):
             if f1 > best_f1:
                 best_f1 = f1
                 best_model = copy.deepcopy(model).to("cpu")
+                pat = config["patience"]
+            else:
+                pat -= 1
+
+            if pat <= 0:
+                break
 
             writer.add_scalar("Loss/train", train_losses[-1], epoch)
             writer.add_scalar("Loss/dev", dev_losses[-1], epoch)
@@ -193,6 +208,7 @@ def main(config: dict):
             tokenizer,
             id2slots,
             slots2id,
+            id2intent,
         )
 
         writer.add_scalar("F1/test", f1, r)
@@ -224,9 +240,9 @@ def main(config: dict):
 
 if __name__ == "__main__":
     # set seeds
-    torch.manual_seed(42)
-    np.random.seed(42)
-    random.seed(42)
+    torch.manual_seed(0)
+    np.random.seed(0)
+    random.seed(0)
 
     args = parser.parse_args()
     config: dict = load_config(args.c)
@@ -247,6 +263,7 @@ if __name__ == "__main__":
             "grad_clip": config.get("grad_clip", True),
             "scheduler": config.get("scheduler", True),
             "lr": config.get("lr", 5e-5),
+            "patience": config.get("patience", 5),
         }
 
         main(config)

@@ -82,6 +82,7 @@ def main(config: dict):
 
     best_model = None
     best_f1 = -float("inf")
+    pat = config["patience"]
 
     rolling_f1, rolling_prec, rolling_recall, rolling_loss = [], [], [], []
 
@@ -127,6 +128,7 @@ def main(config: dict):
                 optimizer,
                 slot_loss_fn,
                 slots2id,
+                id2slots,
                 scheduler,
                 config["grad_clip"],
             )
@@ -146,7 +148,12 @@ def main(config: dict):
             if f1 > best_f1:
                 best_f1 = f1
                 best_model = copy.deepcopy(model).to("cpu")
-            # continue 160
+                pat = config["patience"]
+            else:
+                pat -= 1
+
+            if pat <= 0:
+                break
 
             writer.add_scalar("Loss/train", train_losses[-1], epoch)
             writer.add_scalar("Loss/dev", dev_losses[-1], epoch)
@@ -200,6 +207,7 @@ if __name__ == "__main__":
             "epochs": config.get("epochs", 6),
             "grad_clip": config.get("grad_clip", True),
             "scheduler": config.get("scheduler", True),
+            "patience": config.get("patience", 5),
         }
 
         main(config)
