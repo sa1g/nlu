@@ -8,7 +8,10 @@ import torch
 import torch.nn as nn
 import numpy as np
 import math
+import torch.optim as optim
 
+from tqdm import tqdm
+import copy
 # Import everything from functions.py file
 # from functions import *
 
@@ -43,21 +46,20 @@ if __name__ == "__main__":
     train_loader = DataLoader(
         train_dataset,
         batch_size=64,
-        collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),
+        collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"], device=device),
         shuffle=True,
     )
     dev_loader = DataLoader(
         dev_dataset,
         batch_size=128,
-        collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),
+        collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"], device=device),
     )
     test_loader = DataLoader(
         test_dataset,
         batch_size=128,
-        collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),
+        collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"], device=device),
     )
 
-    import torch.optim as optim
 
     # Experiment also with a smaller or bigger model by changing hid and emb sizes
     # A large model tends to overfit
@@ -85,9 +87,6 @@ if __name__ == "__main__":
         ignore_index=lang.word2id["<pad>"], reduction="sum"
     )
 
-    import matplotlib.pyplot as plt
-    from tqdm import tqdm
-    import copy
 
     n_epochs = 50
     patience = 3
