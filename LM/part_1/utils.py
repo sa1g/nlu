@@ -1,15 +1,14 @@
 # Add functions or classes used for data loading and preprocessing
 
+import os
 from dataclasses import dataclass
+from functools import partial
 from typing import Type, Union
+
 import torch
 import torch.utils.data as data
+from model import LM_LSTM, LM_RNN
 from torch.optim import SGD, AdamW
-
-from model import LM_RNN, LM_LSTM
-
-import os
-from functools import partial
 from torch.utils.data import DataLoader
 
 

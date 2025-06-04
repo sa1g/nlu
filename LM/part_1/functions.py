@@ -3,28 +3,18 @@
 
 import copy
 import math
+import os
+from functools import partial
 from typing import List, Optional
+
 import numpy as np
 import torch
 import torch.nn as nn
-from functools import partial
+from model import LM_LSTM, LM_RNN
 from torch.utils.data import DataLoader
-
-import os
-
 from tqdm import tqdm
-
-from utils import (
-    Common,
-    ExperimentConfig,
-    get_dataloaders_and_lang,
-    read_file,
-    get_vocab,
-    Lang,
-    PennTreeBank,
-    collate_fn,
-)
-from model import LM_RNN, LM_LSTM
+from utils import (Common, ExperimentConfig, Lang, PennTreeBank, collate_fn,
+                   get_dataloaders_and_lang, get_vocab, read_file)
 
 
 def train_loop(data, optimizer, criterion, model, clip=5):

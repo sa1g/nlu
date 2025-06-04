@@ -1,5 +1,6 @@
-import torch.nn as nn
 from abc import ABC, abstractmethod
+
+import torch.nn as nn
 
 
 class ModelApi(nn.Module, ABC):
@@ -29,7 +30,13 @@ class LM_RNN(ModelApi):
         n_layers: int = 1,
     ):
         super().__init__(
-            emb_size, hidden_size, output_size, pad_index, out_dropout, emb_dropout, n_layers
+            emb_size,
+            hidden_size,
+            output_size,
+            pad_index,
+            out_dropout,
+            emb_dropout,
+            n_layers,
         )
 
         self.embedding = nn.Embedding(output_size, emb_size, padding_idx=pad_index)
@@ -59,7 +66,13 @@ class LM_LSTM(ModelApi):
         n_layers: int = 1,
     ):
         super().__init__(
-            emb_size, hidden_size, output_size, pad_index, out_dropout, emb_dropout, n_layers
+            emb_size,
+            hidden_size,
+            output_size,
+            pad_index,
+            out_dropout,
+            emb_dropout,
+            n_layers,
         )
         self.embedding = nn.Embedding(output_size, emb_size, padding_idx=pad_index)
         self.lstm = nn.LSTM(
