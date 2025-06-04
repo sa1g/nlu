@@ -1,13 +1,48 @@
 # Add functions or classes used for data loading and preprocessing
 
-import torch
-from functools import partial
-from torch.utils.data import DataLoader
+from dataclasses import dataclass
+from typing import Type, Union
 import torch
 import torch.utils.data as data
+from torch.optim import SGD, AdamW
+
+from model import LM_RNN, LM_LSTM
+
+import os
+from functools import partial
+from torch.utils.data import DataLoader
 
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+@dataclass(frozen=True)
+class Common:
+    """
+    Common configuration for the project
+    """
+
+    dataset_base_path: str = "../dataset/PennTreeBank/"
+    train_batch_size: int = 64
+    eval_batch_size: int = 128
+    test_batch_size: int = 128
+
+
+@dataclass
+class ExperimentConfig:
+    """
+    Configuration for experiments
+    """
+
+    hid_size: int = 200
+    emb_size: int = 300
+    lr: float = 0.5
+    clip: int = 5
+    n_epochs: int = 100
+    patience: int = 3
+
+    dropout_embedding: float = 0
+    dropout_output: float = 0
+
+    model_type: Union[Type[LM_RNN], Type[LM_LSTM]] = LM_RNN
+    optim: Union[Type[SGD], Type[AdamW]] = SGD
 
 
 def read_file(path, eos_token="<eos>"):
@@ -193,3 +228,34 @@ def collate_fn(data, pad_token, device: torch.device):
     new_item["target"] = target.to(device)
     new_item["number_tokens"] = sum(lengths)
     return new_item
+
+
+def get_dataloaders_and_lang(common: Common, device: torch.device):
+    train_raw = read_file(os.path.join(common.dataset_base_path, "ptb.train.txt"))
+    dev_raw = read_file(os.path.join(common.dataset_base_path, "ptb.valid.txt"))
+    test_raw = read_file(os.path.join(common.dataset_base_path, "ptb.test.txt"))
+
+    lang = Lang(train_raw, ["<pad>", "<eos>"])
+
+    train_dataset = PennTreeBank(train_raw, lang)
+    dev_dataset = PennTreeBank(dev_raw, lang)
+    test_dataset = PennTreeBank(test_raw, lang)
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=64,
+        collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"], device=device),
+        shuffle=True,
+    )
+    dev_loader = DataLoader(
+        dev_dataset,
+        batch_size=128,
+        collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"], device=device),
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=128,
+        collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"], device=device),
+    )
+
+    return train_loader, dev_loader, test_loader, lang
