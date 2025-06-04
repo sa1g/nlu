@@ -272,6 +272,8 @@ def train(
     logging.debug("Training")
     pbar = tqdm(range(1, n_epochs))
 
+    pat = patience
+
     # Training loop :)
     for epoch in pbar:
         loss = train_loop(train_loader, optimizer, criterion_train, model, clip)
@@ -289,31 +291,15 @@ def train(
             writer.add_scalar("PPL/Test", ppl_dev, epoch)
 
             # early stopping deactivated
-            if patience != -1:
-                if ppl_dev < best_ppl:
-                    best_ppl = ppl_dev
-                    best_model = copy.deepcopy(model).to("cpu")
-                    patience = patience
-                else:
-                    patience -= 1
+            if ppl_dev < best_ppl:
+                best_ppl = ppl_dev
+                best_model = copy.deepcopy(model).to("cpu")
+                pat = patience
+            else:
+                pat -= 1
 
-                if patience <= 0:
-                    logging.info("My patience is done!")
-                    break
-
-        if optimizer.__class__.__name__ == "NTAvSGD":
-            if (
-                (
-                    "t0" not in optimizer.param_groups[0]
-                    and len(losses_dev) > optimizer_config["non_monotonic_interval"]
-                    and loss_dev
-                    > min(losses_dev[: -optimizer_config["non_monotonic_interval"]])
-                    and optimizer_config["optim_name"] == "nmASGD"
-                )
-                or (epoch > 10)
-            ) and (optimizer.is_triggered == False):
-                optimizer.trigger()
-                logging.debug(f"TRIGGERED!")
+            if pat <= 0:
+                break
 
     logging.debug("Done")
 

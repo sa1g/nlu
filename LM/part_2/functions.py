@@ -283,6 +283,8 @@ def train(
     best_ppl = math.inf
     best_model = None
 
+    pat = patience
+
     logging.debug("Training")
     pbar = tqdm(range(1, n_epochs))
 
@@ -303,17 +305,15 @@ def train(
             writer.add_scalar("PPL/Test", ppl_dev, epoch)
 
             # early stopping deactivated
-            if patience != -1:
-                if ppl_dev < best_ppl:
-                    best_ppl = ppl_dev
-                    best_model = copy.deepcopy(model).to("cpu")
-                    patience = patience
-                else:
-                    patience -= 1
+            if ppl_dev < best_ppl:
+                best_ppl = ppl_dev
+                best_model = copy.deepcopy(model).to("cpu")
+                pat = patience
+            else:
+                pat -= 1
 
-                if patience <= 0:
-                    logging.info("My patience is done!")
-                    break
+            if pat <= 0:
+                break
 
         if optimizer.__class__.__name__ == "NTAvSGD":
             if (
