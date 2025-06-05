@@ -187,7 +187,6 @@ def experiments_launcher(
 
     for experiment in experiment_config:
         logging.info(f"Running experiment with config: {str(experiment)}")
-        # print("Running experiment with config: ", str(experiment))
 
         run_experiment(
             train_loader,

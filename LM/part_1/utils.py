@@ -177,8 +177,8 @@ class PennTreeBank(data.Dataset):
                 if x in lang.word2id:
                     tmp_seq.append(lang.word2id[x])
                 else:
-                    print("OOV found!")
-                    print(
+                    logger.critical("OOV found!")
+                    logger.critical(
                         "You have to deal with that"
                     )  # PennTreeBank doesn't have OOV but "Trust is good, control is better!"
                     break
