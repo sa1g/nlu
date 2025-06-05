@@ -1,5 +1,6 @@
 # Add functions or classes used for data loading and preprocessing
 
+import logging
 import os
 from dataclasses import dataclass
 from functools import partial
@@ -7,9 +8,10 @@ from typing import Type, Union
 
 import torch
 import torch.utils.data as data
-from model import LM_LSTM, LM_RNN
 from torch.optim import SGD, AdamW
 from torch.utils.data import DataLoader
+
+from model import LM_LSTM, LM_RNN
 
 
 @dataclass(frozen=True)
@@ -19,9 +21,9 @@ class Common:
     """
 
     dataset_base_path: str = "../dataset/PennTreeBank/"
-    train_batch_size: int = 64
-    eval_batch_size: int = 128
-    test_batch_size: int = 128
+    train_batch_size: int = 256
+    eval_batch_size: int = 256
+    test_batch_size: int = 256
 
 
 @dataclass
@@ -30,6 +32,7 @@ class ExperimentConfig:
     Configuration for experiments
     """
 
+    name: str = "Baseline"
     hid_size: int = 200
     emb_size: int = 300
     lr: float = 0.5
@@ -258,3 +261,28 @@ def get_dataloaders_and_lang(common: Common, device: torch.device):
     )
 
     return train_loader, dev_loader, test_loader, lang
+
+
+class EmojiFormatter(logging.Formatter):
+    def format(self, record):
+        # Add emoji based on log level
+        if record.levelno == logging.INFO:
+            emoji = "🤓\t"
+        elif record.levelno == logging.WARNING:
+            emoji = "⚠️\t"
+        else:
+            emoji = ""  # Default (no emoji for other levels)
+
+        # Update the format string dynamically
+        self._style._fmt = f"{emoji}%(levelname)s - %(asctime)s - %(message)s"
+        return super().format(record)
+
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger()
+
+# Replace the default formatter with our custom one
+formatter = EmojiFormatter(datefmt="%Y-%m-%d %H:%M:%S")  # Optional: Customize timestamp
+for handler in logger.handlers:
+    handler.setFormatter(formatter)

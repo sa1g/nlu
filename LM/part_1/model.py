@@ -80,8 +80,13 @@ class LM_LSTM(ModelApi):
         )
         self.output = nn.Linear(hidden_size, output_size)
 
+        self.emb_dropout = nn.Dropout(emb_dropout)
+        self.out_dropout = nn.Dropout(out_dropout)
+
     def forward(self, input_sequence):
         emb = self.embedding(input_sequence)
+        emb = self.emb_dropout(emb)
         lstm_out, _ = self.lstm(emb)
+        lstm_out = self.out_dropout(lstm_out)
         output = self.output(lstm_out).permute(0, 2, 1)
         return output

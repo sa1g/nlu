@@ -1,20 +1,20 @@
 # Add the class of your model only
 # Here is where you define the architecture of your model using pytorch
 
-import copy
 import math
 import os
-from functools import partial
+from datetime import datetime
 from typing import List, Optional
 
 import numpy as np
 import torch
 import torch.nn as nn
-from model import LM_LSTM, LM_RNN
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from tqdm import tqdm
-from utils import (Common, ExperimentConfig, Lang, PennTreeBank, collate_fn,
-                   get_dataloaders_and_lang, get_vocab, read_file)
+
+from utils import (Common, ExperimentConfig, Lang, get_dataloaders_and_lang,
+                   logging)
 
 
 def train_loop(data, optimizer, criterion, model, clip=5):
@@ -85,6 +85,22 @@ def run_experiment(
     experiment_config: ExperimentConfig,
     device: torch.device,
 ):
+
+    file_name = os.path.join(
+        "runs", (f"{datetime.now().strftime('%Y%m%d%H%M%S')}-{experiment_config.name}")
+    )
+    writer = SummaryWriter(log_dir=file_name)
+    writer.add_scalar("hparams/hid_size", experiment_config.hid_size)
+    writer.add_scalar("hparams/emd_size", experiment_config.emb_size)
+    writer.add_scalar("hparams/lr", experiment_config.lr)
+    writer.add_scalar("hparams/clip", experiment_config.clip)
+    writer.add_scalar("hparams/n_epochs", experiment_config.n_epochs)
+    writer.add_scalar("hparams/patience", experiment_config.patience)
+    writer.add_scalar("hparams/dropout_embedding", experiment_config.dropout_embedding)
+    writer.add_scalar("hparams/dropout_output", experiment_config.dropout_output)
+    writer.add_text("hparams/model", experiment_config.model_type.__name__)
+    writer.add_text("hparams/optim", experiment_config.optim.__name__)
+
     vocal_len = len(lang.word2id)
 
     model = experiment_config.model_type(
@@ -109,24 +125,29 @@ def run_experiment(
     losses_dev = []
     sampled_epochs = []
     best_ppl = math.inf
-    best_model: Optional[torch.nn.Module] = None
+    best_model_state: Optional[dict] = None
 
     pbar = tqdm(range(1, experiment_config.n_epochs))
-
     # If the PPL is too high try to change the learning rate
     for epoch in pbar:
         loss = train_loop(
             train_loader, optimizer, criterion_train, model, experiment_config.clip
         )
+
+        writer.add_scalar("loss/train", loss, epoch)
+
         if epoch % 1 == 0:
             sampled_epochs.append(epoch)
             losses_train.append(np.asarray(loss).mean())
             ppl_dev, loss_dev = eval_loop(dev_loader, criterion_eval, model)
+            writer.add_scalar("loss/dev", loss_dev, epoch)
+            writer.add_scalar("ppl/dev", ppl_dev)
             losses_dev.append(np.asarray(loss_dev).mean())
             pbar.set_description("PPL: %f" % ppl_dev)
             if ppl_dev < best_ppl:  # the lower, the better
                 best_ppl = ppl_dev
-                best_model = copy.deepcopy(model).to("cpu")
+                with torch.no_grad():
+                    best_model_state = model.state_dict()
                 patience = 3
             else:
                 patience -= 1
@@ -134,11 +155,27 @@ def run_experiment(
             if patience <= 0:  # Early stopping with patience
                 break  # Not nice but it keeps the code clean
 
-    if best_model is not None:
+    if best_model_state is not None:
+        best_model = experiment_config.model_type(
+            emb_size=experiment_config.emb_size,
+            hidden_size=experiment_config.hid_size,
+            output_size=vocal_len,
+            pad_index=lang.word2id["<pad>"],
+            out_dropout=experiment_config.dropout_output,
+            emb_dropout=experiment_config.dropout_embedding,
+            n_layers=1,
+        )
+        best_model.load_state_dict(best_model_state)
         best_model.to(device)
 
-    final_ppl, _ = eval_loop(test_loader, criterion_eval, best_model)
-    print("Test ppl: ", final_ppl)
+        final_ppl, _ = eval_loop(test_loader, criterion_eval, best_model)
+
+        writer.add_scalar("ppl/test", final_ppl)
+        writer.add_scalar("ppl/dev_final", best_ppl)
+
+        # Save the model
+        model_path = os.path.join(file_name, "model.pt")
+        torch.save(best_model_state, model_path)  # type: ignore
 
 
 def experiments_launcher(
@@ -149,7 +186,9 @@ def experiments_launcher(
     )
 
     for experiment in experiment_config:
-        print("Running experiment with config: ", experiment_config)
+        logging.info(f"Running experiment with config: {str(experiment)}")
+        # print("Running experiment with config: ", str(experiment))
+
         run_experiment(
             train_loader,
             dev_loader,
