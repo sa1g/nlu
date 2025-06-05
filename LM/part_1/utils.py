@@ -8,10 +8,9 @@ from typing import Type, Union
 
 import torch
 import torch.utils.data as data
+from model import LM_LSTM, LM_RNN
 from torch.optim import SGD, AdamW
 from torch.utils.data import DataLoader
-
-from model import LM_LSTM, LM_RNN
 
 
 @dataclass(frozen=True)

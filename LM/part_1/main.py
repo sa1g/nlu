@@ -1,8 +1,7 @@
 import torch
-from torch.optim import SGD, AdamW
-
 from functions import experiments_launcher
 from model import LM_LSTM, LM_RNN
+from torch.optim import SGD, AdamW
 from utils import Common, ExperimentConfig
 
 if __name__ == "__main__":
@@ -11,31 +10,31 @@ if __name__ == "__main__":
 
     experiments = [
         ExperimentConfig(name="Baseline05", model_type=LM_RNN, lr=0.5, n_epochs=2),
-        # ExperimentConfig(
-        #     name="Baseline10",
-        #     model_type=LM_RNN,
-        #     lr=1.0,
-        # ),
-        # ExperimentConfig(
-        #     name="Baseline20",
-        #     model_type=LM_RNN,
-        #     lr=2.0,
-        # ),
-        # ExperimentConfig(
-        #     name="LSTM05",
-        #     model_type=LM_LSTM,
-        #     lr=0.5,
-        # ),
-        # ExperimentConfig(
-        #     name="LSTM10",
-        #     model_type=LM_LSTM,
-        #     lr=1.0,
-        # ),
-        # ExperimentConfig(
-        #     name="LSTM20",
-        #     model_type=LM_LSTM,
-        #     lr=2.0,
-        # ),
+        ExperimentConfig(
+            name="Baseline10",
+            model_type=LM_RNN,
+            lr=1.0,
+        ),
+        ExperimentConfig(
+            name="Baseline20",
+            model_type=LM_RNN,
+            lr=2.0,
+        ),
+        ExperimentConfig(
+            name="LSTM05",
+            model_type=LM_LSTM,
+            lr=0.5,
+        ),
+        ExperimentConfig(
+            name="LSTM10",
+            model_type=LM_LSTM,
+            lr=1.0,
+        ),
+        ExperimentConfig(
+            name="LSTM20",
+            model_type=LM_LSTM,
+            lr=2.0,
+        ),
         # ExperimentConfig(
         #     name="LSTM10-DropEmb-05",
         #     model_type=LM_LSTM,

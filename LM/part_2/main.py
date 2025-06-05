@@ -1,8 +1,7 @@
 import torch
-from torch.optim import SGD
-
-from functions import experiments_launcher, NTAvSGD
+from functions import NTAvSGD, experiments_launcher
 from model import LM_LSTM
+from torch.optim import SGD
 from utils import Common, ExperimentConfig
 
 if __name__ == "__main__":

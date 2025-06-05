@@ -12,7 +12,6 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from tqdm import tqdm
-
 from utils import (Common, ExperimentConfig, Lang, get_dataloaders_and_lang,
                    logging)
 

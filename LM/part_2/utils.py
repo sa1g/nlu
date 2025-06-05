@@ -8,10 +8,9 @@ from typing import Type, Union
 
 import torch
 import torch.utils.data as data
-from torch.optim import SGD, AdamW
-from torch.utils.data import DataLoader
-
 from model import LM_LSTM
+from torch.optim import SGD
+from torch.utils.data import DataLoader
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
