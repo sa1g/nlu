@@ -13,7 +13,7 @@ from torch.optim import SGD
 from torch.utils.data import DataLoader
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
 
@@ -49,6 +49,8 @@ class ExperimentConfig:
 
     model_type: type[LM_LSTM] = LM_LSTM
     optim: type[SGD] = SGD
+
+    non_monotonic_interval: int = 5
 
 
 def read_file(path, eos_token="<eos>"):
