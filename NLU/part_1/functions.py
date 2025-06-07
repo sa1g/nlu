@@ -1,27 +1,22 @@
 # Add the class of your model only
 # Here is where you define the architecture of your model using pytorch
-from datetime import datetime
+import logging
 import os
+from datetime import datetime
 from typing import List, Optional
+
 import numpy as np
 import torch
 import torch.nn as nn
-from tqdm import tqdm
-from model import ModelIAS
-from utils import (
-    Common,
-    Lang,
-    ExperimentConfig,
-    PAD_TOKEN,
-    get_dataloaders_and_lang,
-)
-
-import logging
-
-from conll import evaluate
 from sklearn.metrics import classification_report
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter  # type: ignore
+from tqdm import tqdm
+
+from conll import evaluate
+from model import ModelIAS
+from utils import (PAD_TOKEN, Common, ExperimentConfig, Lang,
+                   get_dataloaders_and_lang)
 
 
 def init_weights(mat):

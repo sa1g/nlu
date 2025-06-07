@@ -1,10 +1,10 @@
 # Global variables
 import os
+
 import torch
 
-from utils import Common, ExperimentConfig
 from functions import experiment_launcher
-
+from utils import Common, ExperimentConfig
 
 # words = sum(
 #     [x["utterance"].split() for x in train_raw], []
@@ -34,11 +34,7 @@ if __name__ == "__main__":
     common = Common()
 
     experiment_config = [
-        ExperimentConfig(
-            out_dropout=0.5,
-            emb_dropout=0.5,
-            bidirectional=True
-        )
+        ExperimentConfig(out_dropout=0.5, emb_dropout=0.5, bidirectional=True)
     ]
 
     # ###########################
