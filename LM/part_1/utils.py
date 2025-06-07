@@ -244,18 +244,18 @@ def get_dataloaders_and_lang(common: Common, device: torch.device):
 
     train_loader = DataLoader(
         train_dataset,
-        batch_size=64,
+        batch_size=common.train_batch_size,
         collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"], device=device),
         shuffle=True,
     )
     dev_loader = DataLoader(
         dev_dataset,
-        batch_size=128,
+        batch_size=common.eval_batch_size,
         collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"], device=device),
     )
     test_loader = DataLoader(
         test_dataset,
-        batch_size=128,
+        batch_size=common.test_batch_size,
         collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"], device=device),
     )
 

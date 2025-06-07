@@ -12,8 +12,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from tqdm import tqdm
-from utils import (Common, ExperimentConfig, Lang, get_dataloaders_and_lang,
-                   logging)
+from utils import Common, ExperimentConfig, Lang, get_dataloaders_and_lang, logging
 
 
 def train_loop(data, optimizer, criterion, model, clip=5):
@@ -140,7 +139,7 @@ def run_experiment(
             losses_train.append(np.asarray(loss).mean())
             ppl_dev, loss_dev = eval_loop(dev_loader, criterion_eval, model)
             writer.add_scalar("loss/dev", loss_dev, epoch)
-            writer.add_scalar("ppl/dev", ppl_dev)
+            writer.add_scalar("ppl/dev", ppl_dev, epoch)
             losses_dev.append(np.asarray(loss_dev).mean())
             pbar.set_description("PPL: %f" % ppl_dev)
             if ppl_dev < best_ppl:  # the lower, the better
