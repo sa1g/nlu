@@ -23,6 +23,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
 
+# Here to avoid circular imports
 @dataclass(frozen=True)
 class Common:
     """
@@ -30,11 +31,12 @@ class Common:
     """
 
     dataset_base_path: str = "../dataset/ATIS/"
-    train_batch_size: int = 128
-    eval_batch_size: int = 64
-    test_batch_size: int = 64
+    train_batch_size: int = 16
+    eval_batch_size: int = 16
+    test_batch_size: int = 16
 
 
+# Here to avoid circular imports
 @dataclass
 class ExperimentConfig:
     """
@@ -42,20 +44,13 @@ class ExperimentConfig:
     """
 
     name: str = "Baseline"
-    hid_size: int = 200
-    emb_size: int = 300
-    n_layer: int = 1
-    lr: float = 0.0001
-    clip: int = 5
-    n_epochs: int = 200
-    n_runs: int = 5
-    patience: int = 3
+    n_runs: int = 1
+    n_epochs: int = 30
+    lr: float = 5e-5
+    grad_clip: bool = False
+    scheduler: bool = False
     log_inner: bool = True
-    bidirectional: bool = False
-    emb_dropout: float = 0.0
-    out_dropout: float = 0.0
-
-    optim: type[torch.optim.Adam] = torch.optim.Adam
+    patience: int = 5
 
 
 def load_data(path):
@@ -70,7 +65,6 @@ def load_data(path):
 
 
 class Lang:
-    # def __init__(self, words, intents, slots, cutoff=0):
     def __init__(self, intents, slots):
         # transformers.models.bert.tokenization_bert.BertTokenizer
         self.tokenizer: BertTokenizerFast = BertTokenizerFast.from_pretrained(
@@ -78,7 +72,6 @@ class Lang:
         )
 
         self.pad_token = self.tokenizer.pad_token_id
-        self.pad_label = PAD_TOKEN
 
         # self.word2id = self.w2id(words, cutoff=cutoff, unk=True)
         self.slot2id = self.lab2id(slots)
@@ -91,7 +84,7 @@ class Lang:
     def lab2id(self, elements, pad=True):
         vocab = {}
         if pad:
-            vocab["pad"] = PAD_TOKEN
+            vocab["pad"] = self.pad_token
         for elem in elements:
             vocab[elem] = len(vocab)
         return vocab
@@ -99,7 +92,7 @@ class Lang:
 
 @dataclass
 class Sample:
-    utterance: torch.Tensor
+    tokenized_utterance: torch.Tensor
     attention_mask: torch.Tensor
     slots: torch.Tensor
     intent: torch.Tensor
@@ -150,17 +143,17 @@ class IntentsAndSlots(Dataset):
             att_mask = tokenized["attention_mask"]  # type: ignore
             word_ids = tokenized.word_ids()
 
-            tokenized_sentence.extend(utt)
-            attention_mask.extend(att_mask)
+            tokenized_sentence.extend(utt)  # type: ignore
+            attention_mask.extend(att_mask)  # type: ignore
 
             # If all word_ids are the same, it means the word is a single token
             # so we have to <pad> the slot_ids which are not the first one
             if len(set(word_ids)) == 1:
                 slots.extend([label])
-                slots.extend([self.pad_token_id] * (len(utt) - 1))
+                slots.extend([self.pad_token_id] * (len(utt) - 1))  # type: ignore
             else:
                 # otherwise, we can copy the slot_id for all the tokens of the "word"
-                slots.extend([label] * len(utt))
+                slots.extend([label] * len(utt))  # type: ignore
 
         tokenized_sentence = torch.tensor(tokenized_sentence)
         attention_mask = torch.tensor(attention_mask)
@@ -168,7 +161,7 @@ class IntentsAndSlots(Dataset):
         intent_ids = torch.tensor(intent_ids)
 
         return Sample(
-            utterance=tokenized_sentence,
+            tokenized_utterance=tokenized_sentence,
             attention_mask=attention_mask,
             slots=slots,
             intent=intent_ids,
@@ -197,7 +190,16 @@ class IntentsAndSlots(Dataset):
         return res
 
 
-def collate_fn(data, device: torch.device):
+@dataclass
+class Batch:
+    utterances: torch.Tensor
+    attention_masks: torch.Tensor
+    y_slots: torch.Tensor
+    slots_len: torch.Tensor
+    intents: torch.Tensor
+
+
+def collate_fn(batch: List[Sample], device: torch.device):
     def merge(sequences):
         """
         merge from batch * sent_len to batch * max_len
@@ -211,33 +213,50 @@ def collate_fn(data, device: torch.device):
         for i, seq in enumerate(sequences):
             end = lengths[i]
             padded_seqs[i, :end] = seq  # We copy each sequence into the matrix
-        # print(padded_seqs)
         padded_seqs = (
             padded_seqs.detach()
         )  # We remove these tensors from the computational graph
         return padded_seqs, lengths
 
-    # Sort data by seq lengths
-    data.sort(key=lambda x: len(x["utterance"]), reverse=True)
+    # Sort batch by sequence lengths (descending order)
+    batch.sort(key=lambda x: len(x.tokenized_utterance), reverse=True)
+
+    # Create dictionary to hold batched data
     new_item = {}
-    for key in data[0].keys():
-        new_item[key] = [d[key] for d in data]
 
-    # We just need one length for packed pad seq, since len(utt) == len(slots)
-    src_utt, _ = merge(new_item["utterance"])
-    y_slots, y_lengths = merge(new_item["slots"])
-    intent = torch.LongTensor(new_item["intent"])
+    # Get all fields from the Sample dataclass
+    fields = Sample.__dataclass_fields__.keys()
 
-    src_utt = src_utt.to(device)  # We load the Tensor on our selected device
-    y_slots = y_slots.to(device)
-    intent = intent.to(device)
-    y_lengths = torch.LongTensor(y_lengths).to(device)
+    # Process each field
+    for field in fields:
+        if field == "tokenized_utterance":
+            src_utt, _ = merge([sample.tokenized_utterance for sample in batch])
+            new_item["utterances"] = src_utt.to(device)
+        elif field == "attention_mask":
+            # For attention mask, we need to pad with 0s (not attending to padding)
+            masks = [sample.attention_mask for sample in batch]
+            lengths = [len(mask) for mask in masks]
+            max_len = max(lengths) if max(lengths) > 0 else 1
+            padded_masks = torch.LongTensor(len(batch), max_len).fill_(0)
+            for i, mask in enumerate(masks):
+                end = lengths[i]
+                padded_masks[i, :end] = mask
+            new_item["attention_masks"] = padded_masks.to(device)
+        elif field == "slots":
+            y_slots, y_lengths = merge([sample.slots for sample in batch])
+            new_item["y_slots"] = y_slots.to(device)
+            new_item["slots_len"] = torch.LongTensor(y_lengths).to(device)
+        elif field == "intent":
+            intent = torch.LongTensor([sample.intent for sample in batch])
+            new_item["intents"] = intent.to(device)
 
-    new_item["utterances"] = src_utt
-    new_item["intents"] = intent
-    new_item["y_slots"] = y_slots
-    new_item["slots_len"] = y_lengths
-    return new_item
+    return Batch(
+        utterances=new_item["utterances"],
+        attention_masks=new_item["attention_masks"],
+        y_slots=new_item["y_slots"],
+        slots_len=new_item["slots_len"],
+        intents=new_item["intents"],
+    )
 
 
 def get_dataloaders_and_lang(
@@ -296,27 +315,36 @@ def get_dataloaders_and_lang(
     dev_dataset = IntentsAndSlots(dev_raw, lang)
     test_dataset = IntentsAndSlots(test_raw, lang)
 
-    # # Dataloader instantiations
-    # train_loader = DataLoader(
-    #     train_dataset,
-    #     batch_size=config.train_batch_size,
-    #     collate_fn=lambda x: collate_fn(x, device=device),
-    #     shuffle=True,
-    # )
-    # dev_loader = DataLoader(
-    #     dev_dataset,
-    #     batch_size=config.eval_batch_size,
-    #     collate_fn=lambda x: collate_fn(x, device=device),
-    # )
-    # test_loader = DataLoader(
-    #     test_dataset,
-    #     batch_size=config.test_batch_size,
-    #     collate_fn=lambda x: collate_fn(x, device=device),
-    # )
+    # Dataloader instantiations
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config.train_batch_size,
+        collate_fn=lambda x: collate_fn(x, device=device),
+        shuffle=True,
+    )
+    dev_loader = DataLoader(
+        dev_dataset,
+        batch_size=config.eval_batch_size,
+        collate_fn=lambda x: collate_fn(x, device=device),
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=config.test_batch_size,
+        collate_fn=lambda x: collate_fn(x, device=device),
+    )
+
+    # for sample in train_loader:
+    #     print(f"utterance: {sample.utterances.shape}")
+    #     print(f"attention_mask: {sample.attention_masks.shape}")
+    #     print(f"slots: {sample.y_slots.shape}")
+    #     print(f"slots_len: {sample.slots_len.shape}")
+    #     print(f"intent: {sample.intents.shape}")
+    #     exit()
 
     return train_loader, dev_loader, test_loader, lang
 
 
+# Here to avoid circular imports
 class EmojiFormatter(logging.Formatter):
     def format(self, record):
         # Add emoji based on log level
