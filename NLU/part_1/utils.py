@@ -47,14 +47,14 @@ class ExperimentConfig:
     lr: float = 0.0001
     clip: int = 5
     n_epochs: int = 200
-    n_runs: int = 1
+    n_runs: int = 5
     patience: int = 3
     log_inner: bool = True
     bidirectional: bool = False
     emb_dropout: float = 0.0
     out_dropout: float = 0.0
 
-    optim: type[torch.optim.SGD] = torch.optim.SGD
+    optim: type[torch.optim.Adam] = torch.optim.Adam
 
 
 def load_data(path):

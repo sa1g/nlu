@@ -106,7 +106,6 @@ class Sample:
 
 
 class IntentsAndSlots(Dataset):
-    # Mandatory methods are __init__, __len__ and __getitem__
     def __init__(self, dataset, lang: Lang):
         self.utterances = []
         self.intents = []
@@ -131,7 +130,6 @@ class IntentsAndSlots(Dataset):
         ]
 
     def preprocess(self, phrase, slot_ids, intent_ids, i):
-        print(i)
         """
         Prendo una frase, i suoi slot e il suo intent.
 
@@ -143,7 +141,7 @@ class IntentsAndSlots(Dataset):
 
         tokenized_sentence = []
         attention_mask = []
-        labels = []
+        slots = []
 
         for word, label in zip(phrase.split(), slot_ids):
             tokenized = self.tokenizer(word, add_special_tokens=False)
@@ -152,96 +150,29 @@ class IntentsAndSlots(Dataset):
             att_mask = tokenized["attention_mask"]  # type: ignore
             word_ids = tokenized.word_ids()
 
-            # print(f"utt: {utt}")
-            # print(f"att_mask: {att_mask}")
-            # print(f"word_ids: {word_ids}")
-
             tokenized_sentence.extend(utt)
             attention_mask.extend(att_mask)
 
             # If all word_ids are the same, it means the word is a single token
             # so we have to <pad> the slot_ids which are not the first one
             if len(set(word_ids)) == 1:
-                labels.extend([label])
-                labels.extend([self.pad_token_id] * (len(utt) - 1))
+                slots.extend([label])
+                slots.extend([self.pad_token_id] * (len(utt) - 1))
             else:
                 # otherwise, we can copy the slot_id for all the tokens of the "word"
-                labels.extend([label] * len(utt))
+                slots.extend([label] * len(utt))
 
-        print(f"phrase: {phrase}")
-        print(
-            f"tokenized_sentence: {len(tokenized_sentence)} \t|| {tokenized_sentence}"
+        tokenized_sentence = torch.tensor(tokenized_sentence)
+        attention_mask = torch.tensor(attention_mask)
+        slots = torch.tensor(slots)
+        intent_ids = torch.tensor(intent_ids)
+
+        return Sample(
+            utterance=tokenized_sentence,
+            attention_mask=attention_mask,
+            slots=slots,
+            intent=intent_ids,
         )
-        print(f"attention_mask: {len(attention_mask)} \t|| {attention_mask}")
-        print(f"labels: {len(labels)} \t\t|| {labels}")
-
-        print("-------")
-
-        if i == 13:
-            exit()
-
-        return None
-
-        # exit()
-
-        # tokenized = self.tokenizer(phrase, return_tensors="pt")
-
-        # utt = tokenized["input_ids"].squeeze(0)  # type: ignore
-        # att_mask = tokenized["attention_mask"].squeeze(0)  # type: ignore
-        # word_idx = tokenized.word_ids()
-
-        # # print("---------")
-        # # print(f"utt.shape: {utt.shape}")
-        # # print(f"att_mask.shape: {att_mask.shape}")
-        # # print(f"word_idx.shape: {len(word_idx)}")
-        # # print(f"slot_ids.shape: {len(slot_ids)}")
-        # # print(f"slot ids: {slot_ids}")
-
-        # # print(f"phrase: {phrase}")
-        # # print(f"phrase len: {len(phrase)}")
-
-        # # print("---------")
-
-        # # Remove SEP and CLS tokens
-        # utt = utt[1:-1]
-        # att_mask = att_mask[1:-1]
-        # word_idx = word_idx[1:-1]
-
-        # print("---------")
-        # print(f"phrase: {phrase}")
-        # print(f"utt: {utt.shape} || {utt}")
-        # print(f"att_mask: {att_mask.shape} || {att_mask}")
-        # print(f"word_idx: {len(word_idx)} || {word_idx}")
-        # print("---------")
-        # print(f"slot_ids: {len(slot_ids)} || {slot_ids}")
-
-        # # Now we need to align slot_ids with the tokenized input
-        # aligned_slot_ids = []
-        # prev_word_idx = None
-
-        # for current_word_idx in word_idx:
-        #     if current_word_idx == prev_word_idx:
-        #         # This is a subsequent sub-token of the same word - pad with 0
-        #         aligned_slot_ids.append(0)
-        #     else:
-        #         # This is a new word - get its slot ID
-        #         aligned_slot_ids.append(slot_ids[current_word_idx])
-        #         prev_word_idx = current_word_idx
-
-        # aligned_slot_ids = torch.tensor(aligned_slot_ids)
-
-        # assert (
-        #     utt.shape[0] == aligned_slot_ids.shape[0]
-        # ), "Mismatch between utterance length and aligned slot IDs length!"
-
-        # return Sample(
-        #     utterance=utt,
-        #     attention_mask=att_mask,
-        #     slots=aligned_slot_ids,
-        #     intent=torch.tensor(intent_ids),
-        # )
-
-        exit()
 
     def __len__(self):
         return len(self.processed_samples)
@@ -360,12 +291,10 @@ def get_dataloaders_and_lang(
 
     lang = Lang(intents=intents, slots=slots)
 
+    # Create our datasets
     train_dataset = IntentsAndSlots(train_raw, lang)
-    exit()
-
-    # # Create our datasets
-    # dev_dataset = IntentsAndSlots(dev_raw, lang)
-    # test_dataset = IntentsAndSlots(test_raw, lang)
+    dev_dataset = IntentsAndSlots(dev_raw, lang)
+    test_dataset = IntentsAndSlots(test_raw, lang)
 
     # # Dataloader instantiations
     # train_loader = DataLoader(
