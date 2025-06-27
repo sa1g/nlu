@@ -6,24 +6,6 @@ import torch
 from functions import experiment_launcher
 from utils import Common, ExperimentConfig
 
-# words = sum(
-#     [x["utterance"].split() for x in train_raw], []
-# )  # No set() since we want to compute
-# # the cutoff
-# corpus = train_raw + dev_raw + test_raw  # We do not wat unk labels,
-# # however this depends on the research purpose
-# slots = set(sum([line["slots"].split() for line in corpus], []))
-# intents = set([line["intent"] for line in corpus])
-
-# lang = Lang(words, intents, slots, cutoff=0)
-
-
-# import torch
-# import torch.utils.data as data
-
-
-# from torch.utils.data import DataLoader
-
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -34,8 +16,39 @@ if __name__ == "__main__":
     common = Common()
 
     experiment_config = [
-        ExperimentConfig(out_dropout=0.5, emb_dropout=0.5, bidirectional=True)
+        ExperimentConfig(
+            name="Baseline0001",
+            lr=0.0001,
+        ),
+        ExperimentConfig(
+            name="Baseline001",
+            lr=0.001,
+        ),
+        ExperimentConfig(
+            name="Baseline01",
+            lr=0.01,
+        ),
+        ExperimentConfig(
+            name="DropEmb001",
+            emb_dropout=0.5,
+            lr=0.001,
+        ),
+        ExperimentConfig(
+            name="DropOut001",
+            out_dropout=0.5,
+            lr=0.001,
+        ),
+        ExperimentConfig(
+            name="Bidirectional001",
+            bidirectional=True,
+            lr=0.001,
+        ),
+        ExperimentConfig(
+            name="BidirectionalDrop001",
+            bidirectional=True,
+            out_dropout=0.5,
+            lr=0.001,
+        ),
     ]
 
-    # ###########################
     experiment_launcher(experiment_config, common, device)
