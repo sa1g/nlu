@@ -79,6 +79,7 @@ class Lang:
 
         # self.id2word = {v: k for k, v in self.word2id.items()}
         self.id2slot = {v: k for k, v in self.slot2id.items()}
+        self.id2slot[self.pad_token] = "O"  # Ensure pad token is mapped to "O"
         self.id2intent = {v: k for k, v in self.intent2id.items()}
 
     def lab2id(self, elements, pad=True):

@@ -130,7 +130,7 @@ def eval_loop(model: IntentSlotModel, data: DataLoader, lang: Lang):
             hyp_intents.extend(out_intents)
 
             # Slot inference
-            output_slots = torch.argmax(slot_logits, dim=1)
+            output_slots = torch.argmax(slot_logits, dim=2)
 
             # torch.Size([16, 25, 130])
             # torch.Size([16, 130])
@@ -145,17 +145,31 @@ def eval_loop(model: IntentSlotModel, data: DataLoader, lang: Lang):
                         sample.utterances[i].cpu().tolist(),
                         include_special_tokens=False,
                     )
-                )
+                )[:sequence_length]
 
-                tmp_ref = [
-                    (utterance[j], lang.id2slot[sample.y_slots[i][j].item()])
-                    for j in range(sequence_length)
-                ]
+                tmp_ref = []
+                tmp_hyp = []
+                for j in range(sequence_length):
+                    if sample.y_slots[i][j].item() == lang.pad_token:
+                        # Skip padding tokens
+                        continue
 
-                tmp_hyp = [
-                    (utterance[j], lang.id2slot[output_slots[i][j].item()])
-                    for j in range(sequence_length)
-                ]
+                    tmp_ref.append(
+                        (utterance[j], lang.id2slot[sample.y_slots[i][j].item()])
+                    )
+                    tmp_hyp.append(
+                        (utterance[j], lang.id2slot[output_slots[i][j].item()])
+                    )
+
+                # tmp_ref = [
+                #     (utterance[j], lang.id2slot[sample.y_slots[i][j].item()])
+                #     for j in range(sequence_length)
+                # ]
+
+                # tmp_hyp = [
+                #     (utterance[j], lang.id2slot[output_slots[i][j].item()])
+                #     for j in range(sequence_length)
+                # ]
 
                 # print(tmp_ref)
                 # print(tmp_hyp)
@@ -163,51 +177,29 @@ def eval_loop(model: IntentSlotModel, data: DataLoader, lang: Lang):
                 ref_slots.append(tmp_ref)
                 hyp_slots.append(tmp_hyp)
 
-        # f1_slot = evaluate(ref_slots, hyp_slots)
+    # Compute the F1 score for the slots
+    try:
+        f1_slot = evaluate(ref_slots, hyp_slots)
+    except Exception as ex:
+        # Sometimes the model predicts a class that is not in REF
+        print("\nWarning:", ex)
+        ref_s = set([x[1] for x in ref_slots])
+        hyp_s = set([x[1] for x in hyp_slots])
+        print(hyp_s.difference(ref_s))
+        f1_slot = {"total": {"f": 0}}
 
-        # print(f1_slot["total"]["f"])
+    print(f1_slot["total"]["f"])
 
-        accuracy_intention = classification_report(  # type: ignore
-            ref_intents,
-            hyp_intents,
-            output_dict=True,
-            zero_division=False,
-        )["accuracy"]
+    accuracy_intention = classification_report(  # type: ignore
+        ref_intents,
+        hyp_intents,
+        output_dict=True,
+        zero_division=False,
+    )["accuracy"]
 
-        print(f"Intent accuracy: {accuracy_intention:.4f}")
+    print(f"Intent accuracy: {accuracy_intention:.4f}")
 
-        exit(23)
-
-    #         for id_seq, seq in enumerate(output_slots):
-    #             length = sample.slots_len.tolist()[id_seq]
-    #             utt =
-
-    #             utt_ids = sample.utterances[id_seq][:length].tolist()
-    #             gt_ids = sample.y_slots[id_seq].tolist()
-    #             gt_slots = [lang.id2slot[elem] for elem in gt_ids[:length]]
-    #             utterance = [lang.id2word[elem] for elem in utt_ids]
-    #             to_decode = seq[:length].tolist()
-    #             ref_slots.append(
-    #                 [(utterance[id_el], elem) for id_el, elem in enumerate(gt_slots)]
-    #             )
-    #             tmp_seq = []
-    #             for id_el, elem in enumerate(to_decode):
-    #                 tmp_seq.append((utterance[id_el], lang.id2slot[elem]))
-    #             hyp_slots.append(tmp_seq)
-    # try:
-    #     results = evaluate(ref_slots, hyp_slots)
-    # except Exception as ex:
-    #     # Sometimes the model predicts a class that is not in REF
-    #     print("Warning:", ex)
-    #     ref_s = set([x[1] for x in ref_slots])
-    #     hyp_s = set([x[1] for x in hyp_slots])
-    #     print(hyp_s.difference(ref_s))
-    #     results = {"total": {"f": 0}}
-
-    # report_intent = classification_report(
-    #     ref_intents, hyp_intents, zero_division=False, output_dict=True
-    # )
-    # return results, report_intent, loss_array
+    return float(f1_slot["total"]["f"]), float(accuracy_intention), loss_array
 
 
 def run_experiment(
@@ -229,7 +221,7 @@ def run_experiment(
 
     patience = experiment_config.patience
     best_model_state: Optional[dict] = None
-    best_f1 = 0
+    top_score = -np.inf
 
     for x in tqdm(range(1, experiment_config.n_epochs)):
         loss = train_loop(
@@ -251,14 +243,14 @@ def run_experiment(
 
             if experiment_config.log_inner:
                 writer.add_scalar("loss/dev", np.asarray(loss_dev).mean(), x)
-                writer.add_scalar("dev/slot_f1_dev", results_dev["total"]["f"], x)
-                writer.add_scalar("dev/intent_acc_dev", intent_res["accuracy"], x)  # type: ignore
+                writer.add_scalar("dev/slot_f1_dev", results_dev, x)
+                writer.add_scalar("dev/intent_acc_dev", intent_res, x)  # type: ignore
 
-            f1 = results_dev["total"]["f"]
+            best_score = (results_dev + intent_res) / 2
 
             # For decreasing the patience you can also use the average between slot f1 and intent accuracy
-            if f1 > best_f1:
-                best_f1 = f1
+            if (results_dev + intent_res) / 2 > top_score:
+                top_score = best_score
                 # Here you should save the model
                 patience = experiment_config.patience
                 with torch.no_grad():
@@ -272,13 +264,13 @@ def run_experiment(
         model.load_state_dict(best_model_state)
 
         results_test, intent_test, _ = eval_loop(
-            test_loader, criterion_slots, criterion_intents, model, lang
+            model=model, data=dev_loader, lang=lang
         )
         if experiment_config.log_inner:
             model_path = os.path.join(file_name, "model.pt")
             torch.save(model.state_dict(), model_path)
 
-    return results_test["total"]["f"], intent_test["accuracy"]  # type: ignore
+        return results_test, intent_test  # type: ignore
 
 
 def experiment_launcher(

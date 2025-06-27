@@ -17,38 +17,42 @@ if __name__ == "__main__":
 
     experiment_config = [
         ExperimentConfig(
-            name="Baseline0001",
+            name="dwoaindowaisndoisanoi",
             lr=0.0001,
         ),
-        ExperimentConfig(
-            name="Baseline001",
-            lr=0.001,
-        ),
-        ExperimentConfig(
-            name="Baseline01",
-            lr=0.01,
-        ),
-        ExperimentConfig(
-            name="DropEmb001",
-            emb_dropout=0.5,
-            lr=0.001,
-        ),
-        ExperimentConfig(
-            name="DropOut001",
-            out_dropout=0.5,
-            lr=0.001,
-        ),
-        ExperimentConfig(
-            name="Bidirectional001",
-            bidirectional=True,
-            lr=0.001,
-        ),
-        ExperimentConfig(
-            name="BidirectionalDrop001",
-            bidirectional=True,
-            out_dropout=0.5,
-            lr=0.001,
-        ),
+        # ExperimentConfig(
+        #     name="Baseline0001",
+        #     lr=0.0001,
+        # ),
+        # ExperimentConfig(
+        #     name="Baseline001",
+        #     lr=0.001,
+        # ),
+        # ExperimentConfig(
+        #     name="Baseline01",
+        #     lr=0.01,
+        # ),
+        # ExperimentConfig(
+        #     name="DropEmb001",
+        #     emb_dropout=0.5,
+        #     lr=0.001,
+        # ),
+        # ExperimentConfig(
+        #     name="DropOut001",
+        #     out_dropout=0.5,
+        #     lr=0.001,
+        # ),
+        # ExperimentConfig(
+        #     name="Bidirectional001",
+        #     bidirectional=True,
+        #     lr=0.001,
+        # ),
+        # ExperimentConfig(
+        #     name="BidirectionalDrop001",
+        #     bidirectional=True,
+        #     out_dropout=0.5,
+        #     lr=0.001,
+        # ),
     ]
 
     experiment_launcher(experiment_config, common, device)
