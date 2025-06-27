@@ -141,105 +141,107 @@ class IntentsAndSlots(Dataset):
         ne l'accuratezza e non vengono calcolati nella loss, ne' nella valutazione.
         """
 
-        tokenized = self.tokenizer(phrase, return_tensors="pt")
+        tokenized_sentence = []
+        attention_mask = []
+        labels = []
 
-        utt = tokenized["input_ids"].squeeze(0)  # type: ignore
-        att_mask = tokenized["attention_mask"].squeeze(0)  # type: ignore
-        word_idx = tokenized.word_ids()
+        for word, label in zip(phrase.split(), slot_ids):
+            tokenized = self.tokenizer(word, add_special_tokens=False)
 
-        # print("---------")
-        # print(f"utt.shape: {utt.shape}")
-        # print(f"att_mask.shape: {att_mask.shape}")
-        # print(f"word_idx.shape: {len(word_idx)}")
-        # print(f"slot_ids.shape: {len(slot_ids)}")
-        # print(f"slot ids: {slot_ids}")
+            utt = tokenized["input_ids"]  # type: ignore
+            att_mask = tokenized["attention_mask"]  # type: ignore
+            word_ids = tokenized.word_ids()
 
-        # print(f"phrase: {phrase}")
-        # print(f"phrase len: {len(phrase)}")
+            # print(f"utt: {utt}")
+            # print(f"att_mask: {att_mask}")
+            # print(f"word_ids: {word_ids}")
 
-        # print("---------")
+            tokenized_sentence.extend(utt)
+            attention_mask.extend(att_mask)
 
-        # Remove SEP and CLS tokens
-        utt = utt[1:-1]
-        att_mask = att_mask[1:-1]
-        word_idx = word_idx[1:-1]
-
-        print("---------")
-        print(f"phrase: {phrase}")
-        print(f"utt: {utt.shape} || {utt}")
-        print(f"att_mask: {att_mask.shape} || {att_mask}")
-        print(f"word_idx: {len(word_idx)} || {word_idx}")
-        print("---------")
-        print(f"slot_ids: {len(slot_ids)} || {slot_ids}")
-
-        # Now we need to align slot_ids with the tokenized input
-        aligned_slot_ids = []
-        prev_word_idx = None
-
-        for current_word_idx in word_idx:
-            if current_word_idx == prev_word_idx:
-                # This is a subsequent sub-token of the same word - pad with 0
-                aligned_slot_ids.append(0)
+            # If all word_ids are the same, it means the word is a single token
+            # so we have to <pad> the slot_ids which are not the first one
+            if len(set(word_ids)) == 1:
+                labels.extend([label])
+                labels.extend([self.pad_token_id] * (len(utt) - 1))
             else:
-                # This is a new word - get its slot ID
-                aligned_slot_ids.append(slot_ids[current_word_idx])
-                prev_word_idx = current_word_idx
+                # otherwise, we can copy the slot_id for all the tokens of the "word"
+                labels.extend([label] * len(utt))
 
-        aligned_slot_ids = torch.tensor(aligned_slot_ids)
-
-        assert (
-            utt.shape[0] == aligned_slot_ids.shape[0]
-        ), "Mismatch between utterance length and aligned slot IDs length!"
-
-        return Sample(
-            utterance=utt,
-            attention_mask=att_mask,
-            slots=aligned_slot_ids,
-            intent=torch.tensor(intent_ids),
+        print(f"phrase: {phrase}")
+        print(
+            f"tokenized_sentence: {len(tokenized_sentence)} \t|| {tokenized_sentence}"
         )
+        print(f"attention_mask: {len(attention_mask)} \t|| {attention_mask}")
+        print(f"labels: {len(labels)} \t\t|| {labels}")
 
-        exit()
+        print("-------")
 
-        # # Step 1: Split raw string into words (basic whitespace tokenizer)
-        # words = (
-        #     phrase.strip().split()
-        # )  # You can use nltk or spaCy for smarter tokenization
+        if i == 13:
+            exit()
 
-        # # Sanity check
-        # assert len(words) == len(slot_labels), "Mismatch between words and slot labels!"
+        return None
 
-        # # Step 2: Tokenize with alignment
-        # encoding = self.tokenizer(
-        #     words,
-        #     is_split_into_words=True,
-        #     padding="max_length",
-        #     truncation=True,
-        #     max_length=max_length,
-        #     return_tensors="pt",
-        #     return_attention_mask=True,
+        # exit()
+
+        # tokenized = self.tokenizer(phrase, return_tensors="pt")
+
+        # utt = tokenized["input_ids"].squeeze(0)  # type: ignore
+        # att_mask = tokenized["attention_mask"].squeeze(0)  # type: ignore
+        # word_idx = tokenized.word_ids()
+
+        # # print("---------")
+        # # print(f"utt.shape: {utt.shape}")
+        # # print(f"att_mask.shape: {att_mask.shape}")
+        # # print(f"word_idx.shape: {len(word_idx)}")
+        # # print(f"slot_ids.shape: {len(slot_ids)}")
+        # # print(f"slot ids: {slot_ids}")
+
+        # # print(f"phrase: {phrase}")
+        # # print(f"phrase len: {len(phrase)}")
+
+        # # print("---------")
+
+        # # Remove SEP and CLS tokens
+        # utt = utt[1:-1]
+        # att_mask = att_mask[1:-1]
+        # word_idx = word_idx[1:-1]
+
+        # print("---------")
+        # print(f"phrase: {phrase}")
+        # print(f"utt: {utt.shape} || {utt}")
+        # print(f"att_mask: {att_mask.shape} || {att_mask}")
+        # print(f"word_idx: {len(word_idx)} || {word_idx}")
+        # print("---------")
+        # print(f"slot_ids: {len(slot_ids)} || {slot_ids}")
+
+        # # Now we need to align slot_ids with the tokenized input
+        # aligned_slot_ids = []
+        # prev_word_idx = None
+
+        # for current_word_idx in word_idx:
+        #     if current_word_idx == prev_word_idx:
+        #         # This is a subsequent sub-token of the same word - pad with 0
+        #         aligned_slot_ids.append(0)
+        #     else:
+        #         # This is a new word - get its slot ID
+        #         aligned_slot_ids.append(slot_ids[current_word_idx])
+        #         prev_word_idx = current_word_idx
+
+        # aligned_slot_ids = torch.tensor(aligned_slot_ids)
+
+        # assert (
+        #     utt.shape[0] == aligned_slot_ids.shape[0]
+        # ), "Mismatch between utterance length and aligned slot IDs length!"
+
+        # return Sample(
+        #     utterance=utt,
+        #     attention_mask=att_mask,
+        #     slots=aligned_slot_ids,
+        #     intent=torch.tensor(intent_ids),
         # )
 
-        # word_ids = encoding.word_ids(batch_index=0)  # map sub-tokens to word index
-        # label_ids = []
-        # previous_word_idx = None
-
-        # for word_idx in word_ids:
-        #     if word_idx is None:
-        #         label_ids.append(-100)  # special tokens like [CLS], [SEP]
-        #     elif word_idx != previous_word_idx:
-        #         label_ids.append(
-        #             slot_label2id[slot_labels[word_idx]]
-        #         )  # first sub-token
-        #     else:
-        #         label_ids.append(-100)  # non-first sub-tokens are ignored
-        #     previous_word_idx = word_idx
-
-        # return {
-        #     "input_ids": encoding["input_ids"].squeeze(0),
-        #     "attention_mask": encoding["attention_mask"].squeeze(0),
-        #     "slot_labels": torch.tensor(label_ids),
-        #     "intent_label": torch.tensor(intent_label2id[intent_label]),
-        # }
+        exit()
 
     def __len__(self):
         return len(self.processed_samples)
