@@ -26,6 +26,7 @@ from utils import (
     get_dataloaders_and_lang,
 )
 from collections import Counter
+from transformers import get_linear_schedule_with_warmup
 
 
 def calculate_loss(
@@ -67,14 +68,9 @@ def train_loop(
     optimizer: torch.optim.Optimizer,
     model: IntentSlotModel,
     lang: Lang,
-    scheduler: bool,
+    scheduler,
     grad_clip: bool,
 ):
-    if scheduler:
-        raise NotImplementedError()
-    if grad_clip:
-        raise NotImplementedError()
-
     model.train()
     loss_array = []
     sample: Batch
@@ -91,7 +87,12 @@ def train_loop(
         loss_array.append(loss.item())
 
         loss.backward()
+        if grad_clip:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
+
+        if scheduler:
+            scheduler.step()
 
     return loss_array
 
@@ -223,13 +224,26 @@ def run_experiment(
     best_model_state: Optional[dict] = None
     top_score = -np.inf
 
+    if experiment_config.scheduler:
+        scheduler = get_linear_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=(
+                int(0.1 * experiment_config.n_epochs)
+                if experiment_config.n_epochs > 4
+                else 4
+            ),
+            num_training_steps=experiment_config.n_epochs * len(train_loader),
+        )
+    else:
+        scheduler = None
+
     for x in tqdm(range(1, experiment_config.n_epochs)):
         loss = train_loop(
             train_loader,
             optimizer,
             model,
             lang,
-            scheduler=experiment_config.scheduler,
+            scheduler=scheduler,
             grad_clip=experiment_config.grad_clip,
         )
 
@@ -309,7 +323,7 @@ def experiment_launcher(
                 f"Running experiment with config: {str(experiment)} - Run {run + 1}"
             )
 
-            f1_run, acc_run = run_experiment(
+            f1_run, acc_run = run_experiment(  # type: ignore
                 train_loader,
                 dev_loader,
                 test_loader,
