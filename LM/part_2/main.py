@@ -1,9 +1,7 @@
+import numpy as np
 import torch
 from functions import NTAvSGD, experiments_launcher
-from model import LM_LSTM
-from torch.optim import SGD
 from utils import Common, ExperimentConfig
-import numpy as np
 
 # Seeding
 torch.manual_seed(42)

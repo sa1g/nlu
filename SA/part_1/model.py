@@ -1,5 +1,5 @@
-from transformers import AutoModel, BertModel
 import torch
+from transformers import AutoModel, BertModel
 
 
 class SlotModel(torch.nn.Module):

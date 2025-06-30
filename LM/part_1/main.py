@@ -1,9 +1,9 @@
+import numpy as np
 import torch
 from functions import experiments_launcher
-from model import LM_LSTM, LM_RNN
-from torch.optim import SGD, AdamW
+from model import LM_LSTM
+from torch.optim import AdamW
 from utils import Common, ExperimentConfig
-import numpy as np
 
 # Seeding
 torch.manual_seed(42)

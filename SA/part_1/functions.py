@@ -1,31 +1,19 @@
 import logging
 import os
+from collections import defaultdict
 from datetime import datetime
 from typing import List, Optional
-from sklearn.metrics import classification_report
-
-from pprint import pprint
 
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.metrics import classification_report
+from model import SlotModel
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from tqdm import tqdm
-
-from model import SlotModel
-from utils import (
-    PAD_TOKEN,
-    Batch,
-    Common,
-    ExperimentConfig,
-    Lang,
-    get_dataloaders_and_lang,
-)
-from collections import Counter
 from transformers import get_linear_schedule_with_warmup
-from collections import defaultdict
+from utils import (Batch, Common, ExperimentConfig, Lang,
+                   get_dataloaders_and_lang)
 
 
 def calculate_loss(logits, sample: Batch, lang: Lang):

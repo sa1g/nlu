@@ -1,30 +1,21 @@
 import logging
 import os
+from collections import Counter
 from datetime import datetime
 from typing import List, Optional
-from sklearn.metrics import classification_report
-
 
 import numpy as np
 import torch
 import torch.nn as nn
+from conll import evaluate
+from model import IntentSlotModel
 from sklearn.metrics import classification_report
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from tqdm import tqdm
-
-from conll import evaluate
-from model import IntentSlotModel
-from utils import (
-    PAD_TOKEN,
-    Batch,
-    Common,
-    ExperimentConfig,
-    Lang,
-    get_dataloaders_and_lang,
-)
-from collections import Counter
 from transformers import get_linear_schedule_with_warmup
+from utils import (Batch, Common, ExperimentConfig, Lang,
+                   get_dataloaders_and_lang)
 
 
 def calculate_loss(

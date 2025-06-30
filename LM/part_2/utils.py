@@ -4,7 +4,6 @@ import logging
 import os
 from dataclasses import dataclass
 from functools import partial
-from typing import Type, Union
 
 import torch
 import torch.utils.data as data

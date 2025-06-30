@@ -9,7 +9,9 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from tqdm import tqdm
-from utils import Common, ExperimentConfig, Lang, get_dataloaders_and_lang, logging
+from utils import (Common, ExperimentConfig, Lang, get_dataloaders_and_lang,
+                   logging)
+
 
 class NTAvSGD(torch.optim.SGD):
     def __init__(
@@ -90,7 +92,6 @@ class NTAvSGD(torch.optim.SGD):
             {k: v.clone() for k, v in avg_group.items()} for avg_group in avg_params
         ]
         super().load_state_dict(state_dict)
-
 
 
 def train_loop(data, optimizer, criterion, model, clip=5):
@@ -196,8 +197,8 @@ def run_experiment(
         ignore_index=lang.word2id["<pad>"], reduction="sum"
     )
 
-    optimizer: torch.optim.SGD | NTAvSGD = (
-        experiment_config.optim(model.parameters(), lr=experiment_config.lr)
+    optimizer: torch.optim.SGD | NTAvSGD = experiment_config.optim(
+        model.parameters(), lr=experiment_config.lr
     )
 
     patience = experiment_config.patience
@@ -231,7 +232,7 @@ def run_experiment(
                 best_ppl = ppl_dev
                 with torch.no_grad():
                     if "T" in optimizer.__dict__:
-                        optimizer.average() # type: ignore
+                        optimizer.average()  # type: ignore
                         best_model_average = model.state_dict()
                         optimizer.restore()
                     best_model_state = model.state_dict()

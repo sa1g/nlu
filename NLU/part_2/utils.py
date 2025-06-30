@@ -3,15 +3,12 @@ import logging
 import os
 from collections import Counter
 from dataclasses import dataclass
-from pprint import pprint
-from typing import List, Optional
+from typing import List
 
-from transformers import BertTokenizerFast
-
-import numpy as np
 import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
+from transformers import BertTokenizerFast
 
 PAD_TOKEN = 0
 

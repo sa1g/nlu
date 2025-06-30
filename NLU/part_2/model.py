@@ -1,6 +1,5 @@
-import logging
-from transformers import AutoModel, BertModel
 import torch
+from transformers import AutoModel, BertModel
 
 
 class IntentSlotModel(torch.nn.Module):
