@@ -1,5 +1,3 @@
-# Add functions or classes used for data loading and preprocessing
-
 import json
 import logging
 import os
@@ -30,9 +28,9 @@ class Common:
     """
 
     dataset_base_path: str = "../dataset/"
-    train_batch_size: int = 32
-    eval_batch_size: int = 32
-    test_batch_size: int = 32
+    train_batch_size: int = 16
+    eval_batch_size: int = 16
+    test_batch_size: int = 16
 
 
 # Here to avoid circular imports
@@ -127,19 +125,6 @@ class Lang:
         self.slot2id = slot2id
         self.id2slot = id2slot
 
-    #     self.slot2id = self.lab2id(slots)
-
-    #     self.id2slot = {v: k for k, v in self.slot2id.items()}
-    #     # self.id2slot[self.pad_token] = "O"  # Ensure pad token is mapped to "O"
-
-    # def lab2id(self, elements, pad=True):
-    #     vocab = {}
-    #     if pad:
-    #         vocab["pad"] = self.pad_token
-    #     for elem in elements:
-    #         vocab[elem] = len(vocab)
-    #     return vocab
-
 
 @dataclass
 class Sample:
@@ -201,8 +186,6 @@ class SlotsDataset(Dataset):
             else:
                 # otherwise, we can copy the slot_id for all the tokens of the "word"
                 slots.extend([label] * len(utt))  # type: ignore
-
-        
         tokenized_sentence = torch.tensor(tokenized_sentence)
         attention_mask = torch.tensor(attention_mask)
         slots = torch.tensor(slots)
@@ -338,47 +321,10 @@ def get_dataloaders_and_lang(
     train_raw = X_train
     dev_raw = X_dev
 
-    # logging.debug(f"Train samples: {len(tmp_train_raw)}")
-    # logging.debug(f"Test samples: {len(test_raw)}")
-    # logging.debug(f"Train samples: {tmp_train_raw[0]}")
-
-    # portion = 0.10
-
-    # intents = [x["slot"] for x in tmp_train_raw]
-    # count_y = Counter(intents)
-
-    # labels = []
-    # inputs = []
-    # mini_train = []
-
-    # for id_y, y in enumerate(intents):
-    #     if count_y[y] > 1:  # If some intents occurs only once, we put them in training
-    #         inputs.append(tmp_train_raw[id_y])
-    #         labels.append(y)
-    #     else:
-    #         mini_train.append(tmp_train_raw[id_y])
-
-    # # Random Stratify
-    # X_train, X_dev, _, _ = train_test_split(
-    #     inputs,
-    #     labels,
-    #     test_size=portion,
-    #     random_state=42,
-    #     shuffle=True,
-    #     stratify=labels,
-    # )
-    # X_train.extend(mini_train)
-    # train_raw = X_train
-    # dev_raw = X_dev
-
     # Dataset size
     logging.info(f"TRAIN size: {len(train_raw)}")
     logging.info(f"DEV size: {len(dev_raw)}")
     logging.info(f"TEST size: {len(test_raw)}")
-
-    # corpus = train_raw + dev_raw + test_raw
-    # slots = set(sum([line["slots"].split() for line in corpus], []))
-    # intents = set([line["intent"] for line in corpus])
 
     slots_set = set()
     for phrases in [train_raw, dev_raw, test_raw]:
@@ -392,10 +338,6 @@ def get_dataloaders_and_lang(
     for slot in slots_set:
         slots2id[slot] = len(slots2id)
         id2slots[len(id2slots)] = slot
-
-    print(slots2id)
-    print(id2slots)
-    exit()
 
     # lang = Lang(slots=slots)
     lang = Lang(slot2id=slots2id, id2slot=id2slots)
@@ -423,12 +365,32 @@ def get_dataloaders_and_lang(
         collate_fn=lambda x: collate_fn(x, device=device),
     )
 
-    # for sample in train_loader:
-    #     print(f"utterance: {sample.utterances.shape}")
-    #     print(f"attention_mask: {sample.attention_masks.shape}")
-    #     print(f"slots: {sample.y_slots.shape}")
-    #     print(f"slots_len: {sample.slots_len.shape}")
-    #     print(f"intent: {sample.intents.shape}")
-    #     exit()
-
     return train_loader, dev_loader, test_loader, lang
+
+
+# Here to avoid circular imports
+class EmojiFormatter(logging.Formatter):
+    def format(self, record):
+        # Add emoji based on log level
+        if record.levelno == logging.INFO:
+            emoji = "🤓\t"
+        elif record.levelno == logging.WARNING:
+            emoji = "⚠️\t"
+        elif record.levelno == logging.DEBUG:
+            emoji = "❗\t"
+        elif record.levelno == logging.ERROR:
+            emoji = "❌\t"
+        elif record.levelno == logging.CRITICAL:
+            emoji = "🚨\t"
+        else:
+            emoji = ""  # Default (no emoji for other levels)
+
+        # Update the format string dynamically
+        self._style._fmt = f"{emoji}%(levelname)s - %(asctime)s - %(message)s"
+        return super().format(record)
+
+
+# Replace the default formatter with our custom one
+formatter = EmojiFormatter(datefmt="%Y-%m-%d %H:%M:%S")  # Optional: Customize timestamp
+for handler in logger.handlers:
+    handler.setFormatter(formatter)

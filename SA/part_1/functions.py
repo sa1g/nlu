@@ -1,11 +1,10 @@
-# Add the class of your model only
-# Here is where you define the architecture of your model using pytorch
 import logging
 import os
 from datetime import datetime
 from typing import List, Optional
 from sklearn.metrics import classification_report
 
+from pprint import pprint
 
 import numpy as np
 import torch
@@ -26,49 +25,20 @@ from utils import (
 )
 from collections import Counter
 from transformers import get_linear_schedule_with_warmup
+from collections import defaultdict
 
 
 def calculate_loss(logits, sample: Batch, lang: Lang):
-    # Flatten labels: shape (B*T,)
     targets = sample.y_slots.view(-1)
-
-    # Count label frequencies (excluding ignore_index)
     ignore_index = lang.slot2id["pad"]
-    valid_targets = targets[targets != ignore_index]
 
-    num_classes = len(lang.id2slot)
-    label_freq = torch.bincount(valid_targets, minlength=num_classes).float()
+    criterion = nn.CrossEntropyLoss(ignore_index=ignore_index)
 
-    # Avoid division by zero by adding epsilon
-    epsilon = 1e-6
-    weights = 1.0 / (label_freq + epsilon)
-    weights = weights + 1.0  # your original `+1` logic
-    weights = weights.to(logits.device)
-
-    criterion = nn.CrossEntropyLoss(weight=weights, ignore_index=ignore_index)
-
-    # Reshape logits to (B*T, num_classes)
-    logits = logits.view(-1, num_classes)
+    logits = logits.view(-1, len(lang.slot2id))
 
     loss = criterion(logits, targets)
+
     return loss
-
-
-# def calculate_loss(logits, sample: Batch, lang: Lang):
-#     sent_count = Counter(sample.y_slots.flatten().tolist())
-
-#     sent_weights = (
-#         torch.tensor([1 / sent_count[x] + 1 for x in lang.id2slot.keys()])
-#         .float()
-#         .to(logits.device)
-#     )
-#     criterion = nn.CrossEntropyLoss(
-#         weight=sent_weights, ignore_index=lang.slot2id["pad"]
-#     )
-
-#     loss = criterion(logits.view(-1, len(lang.id2slot)), sample.y_slots.view(-1))
-
-#     return loss
 
 
 def train_loop(
@@ -90,9 +60,6 @@ def train_loop(
         optimizer.zero_grad()  # Zeroing the gradient
         slot_logits = model(sample.utterances, sample.attention_masks)
 
-        # loss_fn = torch.nn.CrossEntropyLoss(ignore_index=lang.slot2id["pad"])
-        # loss = loss_fn(slot_logits.view(-1, len(lang.slot2id)), sample.y_slots.view(-1))
-
         loss = calculate_loss(slot_logits, sample, lang)
 
         batch_tqdm.set_description(f"Batch | Loss: {loss.item():.4f}")
@@ -106,10 +73,11 @@ def train_loop(
         if scheduler:
             scheduler.step()
 
+    # avg first step 0.13
     return loss_array
 
 
-def tag2ts(ts_tag_sequence):
+def tag2ts1(ts_tag_sequence):
     """
     Transform ts tag sequence to target spans
     :param ts_tag_sequence: tag sequence with 'T' and 'O'
@@ -132,7 +100,7 @@ def tag2ts(ts_tag_sequence):
     return ts_sequence
 
 
-def match_ts(gold_ts_sequence, pred_ts_sequence):
+def match_ts1(gold_ts_sequence, pred_ts_sequence):
     """
     Calculate the number of correctly predicted target spans
     :param gold_ts_sequence: gold standard target spans
@@ -150,7 +118,7 @@ def match_ts(gold_ts_sequence, pred_ts_sequence):
     return hit_count, gold_count, pred_count
 
 
-def evaluate_ts(gold_ts, pred_ts):
+def evaluate_ts1(gold_ts, pred_ts):
     """
     Evaluate the model performance for the binary tagging task
     :param gold_ts: gold standard ts tags
@@ -166,10 +134,10 @@ def evaluate_ts(gold_ts, pred_ts):
     n_tp_ts, n_gold_ts, n_pred_ts = 0, 0, 0
 
     for i in range(n_samples):
-        g_ts_sequence = tag2ts(ts_tag_sequence=gold_ts[i])
-        p_ts_sequence = tag2ts(ts_tag_sequence=pred_ts[i])
+        g_ts_sequence = tag2ts1(ts_tag_sequence=gold_ts[i])
+        p_ts_sequence = tag2ts1(ts_tag_sequence=pred_ts[i])
 
-        hit_ts_count, gold_ts_count, pred_ts_count = match_ts(
+        hit_ts_count, gold_ts_count, pred_ts_count = match_ts1(
             gold_ts_sequence=g_ts_sequence, pred_ts_sequence=p_ts_sequence
         )
 
@@ -184,6 +152,52 @@ def evaluate_ts(gold_ts, pred_ts):
     return precision, recall, f1_score
 
 
+def evaluate_ts_simple(gold_sequences, pred_sequences):
+    """
+    Simplified TS evaluation for nested lists (e.g., [['O', 'T'], ['O']]).
+    Returns: macro_f1, micro_p, micro_r, micro_f1
+    """
+    counts = defaultdict(lambda: {"tp": 0, "gold": 0, "pred": 0})
+
+    # Flatten and iterate over all tags
+    gold_tags = [tag for seq in gold_sequences for tag in seq]
+    pred_tags = [tag for seq in pred_sequences for tag in seq]
+
+    for g, p in zip(gold_tags, pred_tags):
+        if g == p:
+            counts[g]["tp"] += 1
+        counts[g]["gold"] += 1  # Actual count
+        counts[p]["pred"] += 1  # Predicted count
+
+    # Macro F1 (average per-class F1)
+    macro_f1 = 0.0
+    n_classes = 0
+    for label in counts:
+        tp = counts[label]["tp"]
+        precision = tp / (counts[label]["pred"] + 1e-4)
+        recall = tp / (counts[label]["gold"] + 1e-4)
+        f1 = 2 * precision * recall / (precision + recall + 1e-4)
+        macro_f1 += f1
+        n_classes += 1
+    macro_f1 /= n_classes if n_classes else 1
+
+    # Micro F1 (global)
+    total_tp = sum(counts[label]["tp"] for label in counts)
+    total_gold = sum(counts[label]["gold"] for label in counts)
+    total_pred = sum(counts[label]["pred"] for label in counts)
+
+    micro_p = total_tp / (total_pred + 1e-4)
+    micro_r = total_tp / (total_gold + 1e-4)
+    micro_f1 = 2 * micro_p * micro_r / (micro_p + micro_r + 1e-4)
+
+    return {
+        "macro f1": macro_f1,
+        "micro p": micro_p,
+        "micro r": micro_r,
+        "micro f1": micro_f1,
+    }
+
+
 def eval_loop(model: SlotModel, dataloader: DataLoader, lang: Lang):
     model.eval()
     total_loss = []
@@ -192,40 +206,42 @@ def eval_loop(model: SlotModel, dataloader: DataLoader, lang: Lang):
     all_pred_slots = []
 
     with torch.no_grad():
-        data: Batch
-        for i, data in enumerate(dataloader):
-            x = data.utterances
-            attention_mask = data.attention_masks
-            slots = data.y_slots
-            slots_len = data.slots_len
+        sample: Batch
+        for _, sample in enumerate(dataloader):
+            slot_logits = model(sample.utterances, sample.attention_masks)
+            # print(sample.utterances.shape) # torch.Size([16, 26])
 
-            slot_logits = model(x, attention_mask)
-
-            # loss_fn = torch.nn.CrossEntropyLoss(ignore_index=lang.slot2id["pad"])
-            # loss = loss_fn(
-            #     slot_logits.view(-1, len(lang.slot2id)), slots.view(-1)
-            # ).item()
-
-            loss = calculate_loss(slot_logits, data, lang)
+            loss = calculate_loss(slot_logits, sample, lang)
             total_loss.append(loss.cpu().item())
 
             # Extract predictions
             slot_preds = torch.argmax(slot_logits, dim=2).cpu()
-            true_slots = slots.cpu()
 
-            for i in range(x.size(0)):
-                seq_len = slots_len[i]
-                tmp_ref = [
-                    lang.id2slot[true_slots[i][j].item()] for j in range(seq_len)
-                ]
-                tmp_hyp = [
-                    lang.id2slot[slot_preds[i][j].item()] for j in range(seq_len)
-                ]
+            # print(slot_logits.shape) # torch.Size([16, 29, 3])
+            # print(slot_preds.shape) # torch.Size([16, 29])
+
+            true_slots = sample.y_slots.cpu()
+
+            for i in range(sample.utterances.size(0)):
+
+                tmp_ref = []
+                tmp_hyp = []
+                for j in range(sample.slots_len[i]):
+
+                    if sample.y_slots[i][j] == lang.pad_token:
+                        continue
+
+                    tmp_ref.append(lang.id2slot[true_slots[i][j].item()])
+                    tmp_hyp.append(lang.id2slot[slot_preds[i][j].item()])
 
                 all_true_slots.append(tmp_ref)
                 all_pred_slots.append(tmp_hyp)
 
-    ot_precision, ot_recall, ot_f1 = evaluate_ts(all_true_slots, all_pred_slots)
+    evaluated = evaluate_ts_simple(all_true_slots, all_pred_slots)
+
+    ot_f1 = evaluated["micro f1"]
+    ot_precision = evaluated["micro p"]
+    ot_recall = evaluated["micro r"]
 
     return ot_f1, ot_precision, ot_recall, total_loss
 
@@ -240,10 +256,6 @@ def run_experiment(
     writer: SummaryWriter,
     file_name: str = "",
 ):
-
-    for i in train_loader:
-        pass
-    exit()
 
     model = SlotModel(slot_len=len(lang.slot2id)).to(device)
 

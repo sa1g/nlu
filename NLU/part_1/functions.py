@@ -111,10 +111,6 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
         print(hyp_s.difference(ref_s))
         results = {"total": {"f": 0}}
 
-    print(f"ref_slots: {ref_slots}")
-    print(f"hyp_slots: {hyp_slots}")
-    exit(43)
-
     report_intent = classification_report(
         ref_intents, hyp_intents, zero_division=False, output_dict=True
     )

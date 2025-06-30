@@ -14,7 +14,9 @@ if __name__ == "__main__":
     common = Common()
 
     experiment_config = [
-        ExperimentConfig(name="prova", lr=5e-5, scheduler=False, grad_clip=False)
+        ExperimentConfig(
+            name="new", lr=5e-5, scheduler=False, grad_clip=False, n_epochs=10
+        ),
     ]
 
     experiment_launcher(experiment_config, common, device)
