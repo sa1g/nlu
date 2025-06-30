@@ -133,11 +133,6 @@ def eval_loop(model: IntentSlotModel, data: DataLoader, lang: Lang):
             # Slot inference
             output_slots = torch.argmax(slot_logits, dim=2)
 
-            # torch.Size([16, 25, 130])
-            # torch.Size([16, 130])
-            # print(slot_logits.shape)
-            # print(output_slots.shape)
-
             for i in range(sample.utterances.size(0)):
                 sequence_length = int(sample.slots_len[i].item())
 
@@ -161,19 +156,6 @@ def eval_loop(model: IntentSlotModel, data: DataLoader, lang: Lang):
                     tmp_hyp.append(
                         (utterance[j], lang.id2slot[output_slots[i][j].item()])
                     )
-
-                # tmp_ref = [
-                #     (utterance[j], lang.id2slot[sample.y_slots[i][j].item()])
-                #     for j in range(sequence_length)
-                # ]
-
-                # tmp_hyp = [
-                #     (utterance[j], lang.id2slot[output_slots[i][j].item()])
-                #     for j in range(sequence_length)
-                # ]
-
-                # print(tmp_ref)
-                # print(tmp_hyp)
 
                 ref_slots.append(tmp_ref)
                 hyp_slots.append(tmp_hyp)
@@ -278,7 +260,7 @@ def run_experiment(
         model.load_state_dict(best_model_state)
 
         results_test, intent_test, _ = eval_loop(
-            model=model, data=dev_loader, lang=lang
+            model=model, data=test_loader, lang=lang
         )
         if experiment_config.log_inner:
             model_path = os.path.join(file_name, "model.pt")

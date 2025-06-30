@@ -14,8 +14,8 @@ class IntentSlotModel(torch.nn.Module):
         )
         self.slot_classifier = torch.nn.Linear(self.bert.config.hidden_size, slot_len)
 
-    def forward(self, input_ids, attention_mask):
-        outputs = self.bert(input_ids, attention_mask=attention_mask)
+    def forward(self, x, attention_mask):
+        outputs = self.bert(x, attention_mask=attention_mask)
 
         # outputs.last_hidden_state.shape: torch.Size([16, 16, 768])
         # outputs.pooler_output.shape: torch.Size([16, 768])
