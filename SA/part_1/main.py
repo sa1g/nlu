@@ -1,9 +1,20 @@
-# This file is used to run your functions and print the results
-# Please write your fuctions or classes in the functions.py
+import os
 
-# Import everything from functions.py file
-from functions import *
+import torch
+
+from functions import experiment_launcher
+from utils import Common, ExperimentConfig
 
 if __name__ == "__main__":
-    #Wrtite the code to load the datasets and to run your functions
-    # Print the results
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"  # Used to report errors on CUDA side
+    PAD_TOKEN = 0
+
+    common = Common()
+
+    experiment_config = [
+        ExperimentConfig(name="prova", lr=5e-5, scheduler=False, grad_clip=False)
+    ]
+
+    experiment_launcher(experiment_config, common, device)
