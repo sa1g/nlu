@@ -1,6 +1,3 @@
-# Add the class of your model only
-# Here is where you define the architecture of your model using pytorch
-
 import math
 import os
 from datetime import datetime
@@ -39,7 +36,7 @@ def eval_loop(data, eval_criterion, model):
     loss_to_return = []
     loss_array = []
     number_of_tokens = []
-    # softmax = nn.Softmax(dim=1) # Use Softmax if you need the actual probability
+
     with torch.no_grad():  # It used to avoid the creation of computational graph
         for sample in data:
             output = model(sample["source"])

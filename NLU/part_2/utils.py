@@ -1,6 +1,3 @@
-# Add functions or classes used for data loading and preprocessing
-
-
 import json
 import logging
 import os
@@ -66,18 +63,15 @@ def load_data(path):
 
 class Lang:
     def __init__(self, intents, slots):
-        # transformers.models.bert.tokenization_bert.BertTokenizer
         self.tokenizer: BertTokenizerFast = BertTokenizerFast.from_pretrained(
             "bert-base-uncased"
         )
 
         self.pad_token = self.tokenizer.pad_token_id
 
-        # self.word2id = self.w2id(words, cutoff=cutoff, unk=True)
         self.slot2id = self.lab2id(slots)
         self.intent2id = self.lab2id(intents, pad=False)
 
-        # self.id2word = {v: k for k, v in self.word2id.items()}
         self.id2slot = {v: k for k, v in self.slot2id.items()}
         self.id2slot[self.pad_token] = "O"  # Ensure pad token is mapped to "O"
         self.id2intent = {v: k for k, v in self.intent2id.items()}

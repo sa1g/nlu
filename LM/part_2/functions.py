@@ -1,6 +1,3 @@
-# Add the class of your model only
-# Here is where you define the architecture of your model using pytorch
-
 import math
 import os
 from datetime import datetime
@@ -13,105 +10,6 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from tqdm import tqdm
 from utils import Common, ExperimentConfig, Lang, get_dataloaders_and_lang, logging
-
-
-# class NTAvSGD(torch.optim.SGD):
-#     """
-#     Implementation of Non-Monotonically Triggered Average Stochastic Gradient Descent (NT_AvSGD).
-
-#     Args:
-#         model (torch.nn.Module): The neural network model.
-#         dev_loader (torch.utils.data.DataLoader): The data loader for the validation set.
-#         criterion_eval (torch.nn.Module): The evaluation criterion.
-#         lr (float, optional): The learning rate (default: 1).
-#         L (int, optional): The number of iterations between validation checks (default: 165).
-#         n (int, optional): The number of previous validation checks to consider for non-monotonicity (default: 5).
-
-#     Attributes:
-#         temp (dict): A dictionary to store temporary parameter data during averaging.
-#         logs (list): A list to store the validation perplexity values.
-#         dev_loader (torch.utils.data.DataLoader): The data loader for the validation set.
-#         T (int): The iteration at which averaging is triggered.
-#         t (int): The number of cycles completed.
-#         k (int): The current iteration.
-#         L (int): The number of iterations between validation checks.
-#         n (int): The number of previous validation checks to consider for non-monotonicity.
-#         mu (int): The averaging parameter.
-#         model (torch.nn.Module): The neural network model.
-#         ax (dict): A dictionary to store the average of the parameters.
-#         criterion_eval (torch.nn.Module): The evaluation criterion.
-#     """
-
-#     def __init__(self, model, dev_loader, criterion_eval, lr=1, L=165, n=5):
-#         super().__init__(model.parameters(), lr=lr)
-#         self.temp = {}
-#         self.logs = []
-#         self.dev_loader = dev_loader
-#         self.T = 0
-#         self.t = 0
-#         self.k = 0
-#         self.L = L
-#         self.n = n
-#         self.mu = 1
-#         self.model = model
-#         self.ax = {}
-#         self.criterion_eval = criterion_eval
-
-#     def step(self, closure=None):
-#         """
-#         Performs a single optimization step.
-#         """
-#         super().step(closure)
-#         with torch.no_grad():
-#             # Calculate validation perplexity
-#             if self.k % self.L == 0 and self.T == 0:
-#                 ppl_dev, _ = eval_loop(self.dev_loader, self.criterion_eval, self.model)
-#                 self.model.train()
-#                 if self.t > self.n and ppl_dev > min(self.logs[: self.t - self.n]):
-#                     self.T = self.k
-#                     print(
-#                         "Averaging started, at iteration",
-#                         self.k,
-#                         "after",
-#                         self.t,
-#                         "cycles",
-#                     )
-#                 self.logs.append(ppl_dev)
-#                 self.t += 1
-#         self.k += 1
-
-#         if self.T > 0:
-#             for prm in self.model.parameters():
-#                 if prm not in self.ax:
-#                     self.ax[prm] = prm.data.clone()
-#                 else:
-#                     self.ax[prm] = self.ax[prm] + (prm.data - self.ax[prm]) / self.mu
-#             self.mu += 1
-
-#     def average(self):
-#         """
-#         Performs parameter averaging.
-#         """
-#         if self.T == 0:
-#             # No need to average
-#             return
-#         with torch.no_grad():
-#             # Use ax computed in ASGD
-#             for prm in self.model.parameters():
-#                 self.temp[prm] = prm.data.clone()
-#                 prm.data = self.ax[prm].clone()
-
-#     def restore(self):
-#         """
-#         Restores the original parameter values.
-#         """
-#         if self.T == 0:
-#             # No need to restore
-#             return
-#         with torch.no_grad():
-#             for prm in self.model.parameters():
-#                 prm.data = self.temp[prm].clone()
-
 
 class NTAvSGD(torch.optim.SGD):
     def __init__(
@@ -194,85 +92,6 @@ class NTAvSGD(torch.optim.SGD):
         super().load_state_dict(state_dict)
 
 
-# class NTAvSGD(torch.optim.SGD):
-#     def __init__(
-#         self,
-#         params,
-#         lr=0.01,
-#         momentum=0,
-#         dampening=0,
-#         weight_decay=0,
-#         nesterov=False,
-#         log_interval=1,
-#         non_monotone_interval=5,
-#     ):
-#         super().__init__(params, lr, momentum, dampening, weight_decay, nesterov)
-
-#         self.k = 0
-#         self.t = 0
-#         self.T = None
-#         self.logs = []
-#         self.log_interval = log_interval
-#         self.non_monotone_interval = non_monotone_interval
-
-#         self.avg_params = None
-#         self.avg_count = 0
-
-#     def step(self, closure=None):
-#         """Perform a single SGD step and update average if needed."""
-#         loss = None
-#         if closure is not None:
-#             with torch.enable_grad():
-#                 loss = closure()
-#         super().step()
-
-#         if self.T is not None:
-#             self._update_running_average()
-
-#         self.k += 1
-#         return loss
-
-#     def log_validation_metric(self, val_metric):
-#         """Call this every log_interval steps."""
-#         if self.k % self.log_interval == 0 and self.T is None:
-#             if self.t > self.non_monotone_interval:
-#                 window = self.logs[: self.t - self.non_monotone_interval]
-#                 if len(window) > 0 and val_metric > min(window):
-#                     print(f"[NT-AvSGD] Triggering averaging at step {self.k}")
-#                     self.T = self.k
-#                     self._init_running_average()
-#             self.logs.append(val_metric)
-#             self.t += 1
-
-#     def _init_running_average(self):
-#         """Initialize running average with current parameters."""
-#         self.avg_params = [
-#             p.detach().clone() for group in self.param_groups for p in group["params"]
-#         ]
-#         self.avg_count = 1
-
-#     def _update_running_average(self):
-#         """Update running average of parameters."""
-#         idx = 0
-#         for group in self.param_groups:
-#             for p in group["params"]:
-#                 self.avg_params[idx].mul_(self.avg_count).add_(p.data).div_(  # type: ignore
-#                     self.avg_count + 1
-#                 )
-#                 idx += 1
-#         self.avg_count += 1
-
-#     def load_averaged_parameters(self, model):
-#         """Load the current averaged parameters into the given model."""
-#         if self.avg_params is None:
-#             raise RuntimeError("Averaging has not been triggered yet.")
-#         idx = 0
-#         for param in model.parameters():
-#             param.data.copy_(self.avg_params[idx])
-#             idx += 1
-
-#         return model
-
 
 def train_loop(data, optimizer, criterion, model, clip=5):
     model.train()
@@ -298,7 +117,7 @@ def eval_loop(data, eval_criterion, model):
     loss_to_return = []
     loss_array = []
     number_of_tokens = []
-    # softmax = nn.Softmax(dim=1) # Use Softmax if you need the actual probability
+
     with torch.no_grad():  # It used to avoid the creation of computational graph
         for sample in data:
             output = model(sample["source"])
@@ -379,13 +198,6 @@ def run_experiment(
 
     optimizer: torch.optim.SGD | NTAvSGD = (
         experiment_config.optim(model.parameters(), lr=experiment_config.lr)
-        # if type(experiment_config.optim) == torch.optim.SGD
-        # else experiment_config.optim(
-        #     model,
-        #     lr=experiment_config.lr,
-        #     dev_loader=dev_loader,
-        #     criterion_eval=criterion_eval,
-        # )
     )
 
     patience = experiment_config.patience
@@ -415,12 +227,6 @@ def run_experiment(
             losses_dev.append(np.asarray(loss_dev).mean())
             pbar.set_description("PPL: %f" % ppl_dev)
 
-            # if "T" in optimizer.__dict__:
-            #     optimizer.average()
-            #     ppl_dev, loss_dev = eval_loop(dev_loader, criterion_eval, model)
-            #     optimizer.restore()
-            #     writer.add_scalar("ppl/dev_avg", ppl_dev, epoch)
-
             if ppl_dev < best_ppl:  # the lower, the better
                 best_ppl = ppl_dev
                 with torch.no_grad():
@@ -435,13 +241,6 @@ def run_experiment(
 
             if patience <= 0:  # Early stopping with patience
                 break  # Not nice but it keeps the code clean
-
-            # if type(optimizer) == NTAvSGD:
-            #     optimizer.log_validation_metric(ppl_dev)
-
-            #     # Optionally evaluate averaged model during training
-            #     if optimizer.T is not None:
-            #         model = optimizer.load_averaged_parameters(model)
 
             if type(optimizer) == NTAvSGD:
                 if (

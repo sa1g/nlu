@@ -18,11 +18,7 @@ class ModelIAS(nn.Module):
         emb_dropout=0.0,
         out_dropout=0.0,
     ):
-        super(ModelIAS, self).__init__()
-        # hid_size = Hidden size
-        # out_slot = number of slots (output size for slot filling)
-        # out_int = number of intents (output size for intent class)
-        # emb_size = word embedding size
+        super().__init__()
 
         self.embedding = nn.Embedding(vocab_len, emb_size, padding_idx=pad_index)
         self.emb_dropout = nn.Dropout(emb_dropout)
@@ -53,7 +49,6 @@ class ModelIAS(nn.Module):
         utt_emb = self.emb_dropout(utt_emb)  # Apply dropout to the embeddings
 
         # pack_padded_sequence avoid computation over pad tokens reducing the computational cost
-
         packed_input = pack_padded_sequence(
             utt_emb, seq_lengths.cpu().numpy(), batch_first=True
         )
@@ -70,7 +65,6 @@ class ModelIAS(nn.Module):
             last_hidden = last_hidden[-1, :, :]
 
         # Is this another possible way to get the last hiddent state? (Why?)
-        # utt_encoded.permute(1,0,2)[-1]
         utt_encoded = self.out_dropout(utt_encoded)
         last_hidden = self.out_dropout(last_hidden)
 
@@ -79,7 +73,5 @@ class ModelIAS(nn.Module):
         # Compute intent logits
         intent = self.intent_out(last_hidden)
 
-        # Slot size: batch_size, seq_len, classes
         slots = slots.permute(0, 2, 1)  # We need this for computing the loss
-        # Slot size: batch_size, classes, seq_len
         return slots, intent

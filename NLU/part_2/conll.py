@@ -1,7 +1,7 @@
 import re
 
 """
-Modified version of https://pypi.org/project/conlleval/
+From https://pypi.org/project/conlleval/
 """
 
 

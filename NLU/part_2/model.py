@@ -1,4 +1,3 @@
-# from transformers import BertModel
 import logging
 from transformers import AutoModel, BertModel
 import torch
@@ -16,9 +15,6 @@ class IntentSlotModel(torch.nn.Module):
 
     def forward(self, x, attention_mask):
         outputs = self.bert(x, attention_mask=attention_mask)
-
-        # outputs.last_hidden_state.shape: torch.Size([16, 16, 768])
-        # outputs.pooler_output.shape: torch.Size([16, 768])
 
         sequence_output = outputs.last_hidden_state
         slot_logits = self.slot_classifier(sequence_output)
