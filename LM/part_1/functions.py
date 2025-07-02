@@ -9,36 +9,62 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from tqdm import tqdm
-from utils import (Common, ExperimentConfig, Lang, get_dataloaders_and_lang,
-                   logging)
+from utils import Common, ExperimentConfig, Lang, get_dataloaders_and_lang, logging
 
 
 def train_loop(data, optimizer, criterion, model, clip=5):
+    """
+    Classic, simple training loop.
+
+    Args:
+        data: Dataloader
+        optimizer: torch.nn.optim.#
+        criterion: torch.nn.CrossEntropyLoss
+        model: torch.nn.Module
+        clip: float, gradient clipping value
+
+    Returns:
+        Average loss per token
+    """
+
     model.train()
     loss_array = []
     number_of_tokens = []
 
     for sample in data:
-        optimizer.zero_grad()  # Zeroing the gradient
+        optimizer.zero_grad()
         output = model(sample["source"])
         loss = criterion(output, sample["target"])
         loss_array.append(loss.item() * sample["number_tokens"])
         number_of_tokens.append(sample["number_tokens"])
-        loss.backward()  # Compute the gradient, deleting the computational graph
-        # clip the gradient to avoid explosioning gradients
+        loss.backward()
+
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
-        optimizer.step()  # Update the weights
+        optimizer.step()
 
     return sum(loss_array) / sum(number_of_tokens)
 
 
 def eval_loop(data, eval_criterion, model):
+    """
+    Evaluation loop
+
+    Args:
+        data: Dataloader
+        eval_criterion: torch.nn.CrossEntropyLoss
+        model: torch.nn.Module
+
+    Returns:
+        perplexity: float, calculated as exp(sum(loss) / sum(number_of_tokens))
+        loss: float, average loss per token
+    """
+
     model.eval()
     loss_to_return = []
     loss_array = []
     number_of_tokens = []
 
-    with torch.no_grad():  # It used to avoid the creation of computational graph
+    with torch.no_grad():
         for sample in data:
             output = model(sample["source"])
             loss = eval_criterion(output, sample["target"])
@@ -47,10 +73,17 @@ def eval_loop(data, eval_criterion, model):
 
     ppl = math.exp(sum(loss_array) / sum(number_of_tokens))
     loss_to_return = sum(loss_array) / sum(number_of_tokens)
+
     return ppl, loss_to_return
 
 
 def init_weights(mat):
+    """
+    Initialize model weights.
+
+    Args:
+        mat: torch.nn.Module, model to initialize weights for
+    """
     for m in mat.modules():
         if type(m) in [nn.GRU, nn.LSTM, nn.RNN]:
             for name, param in m.named_parameters():
@@ -81,6 +114,12 @@ def run_experiment(
     experiment_config: ExperimentConfig,
     device: torch.device,
 ):
+    """
+    Run a single experiment with the given configuration.
+    It also creates a TensorBoard writer and logs hyperparams + results.
+
+    Args are self-explanatory and typed.
+    """
 
     file_name = os.path.join(
         "runs", (f"{datetime.now().strftime('%Y%m%d%H%M%S')}-{experiment_config.name}")
@@ -124,7 +163,7 @@ def run_experiment(
     best_model_state: Optional[dict] = None
 
     pbar = tqdm(range(1, experiment_config.n_epochs))
-    # If the PPL is too high try to change the learning rate
+
     for epoch in pbar:
         loss = train_loop(
             train_loader, optimizer, criterion_train, model, experiment_config.clip
@@ -140,7 +179,8 @@ def run_experiment(
             writer.add_scalar("ppl/dev", ppl_dev, epoch)
             losses_dev.append(np.asarray(loss_dev).mean())
             pbar.set_description("PPL: %f" % ppl_dev)
-            if ppl_dev < best_ppl:  # the lower, the better
+
+            if ppl_dev < best_ppl:
                 best_ppl = ppl_dev
                 with torch.no_grad():
                     best_model_state = model.state_dict()
@@ -148,8 +188,8 @@ def run_experiment(
             else:
                 patience -= 1
 
-            if patience <= 0:  # Early stopping with patience
-                break  # Not nice but it keeps the code clean
+            if patience <= 0:  # Early stopping
+                break
 
     if best_model_state is not None:
         best_model = experiment_config.model_type(
@@ -177,6 +217,11 @@ def run_experiment(
 def experiments_launcher(
     experiment_config: List[ExperimentConfig], common: Common, device: torch.device
 ):
+    """
+    Launch experiments given the list of experiments.
+
+    Args are self-explanatory and typed.
+    """
     train_loader, dev_loader, test_loader, lang = get_dataloaders_and_lang(
         common, device
     )

@@ -76,7 +76,13 @@ class LM_LSTM(ModelApi):
         )
         self.embedding = nn.Embedding(output_size, emb_size, padding_idx=pad_index)
         self.lstm = nn.LSTM(
-            emb_size, hidden_size, n_layers, bidirectional=False, batch_first=True
+            # as said in the report we just need to change from RNN
+            # to LSTM and add the bidirectional flag
+            emb_size,
+            hidden_size,
+            n_layers,
+            bidirectional=False,
+            batch_first=True,
         )
         self.output = nn.Linear(hidden_size, output_size)
 

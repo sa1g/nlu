@@ -214,7 +214,6 @@ def collate_fn(data, pad_token, device: torch.device):
         return padded_seqs, lengths
 
     # Sort data by seq lengths
-
     data.sort(key=lambda x: len(x["source"]), reverse=True)
     new_item = {}
     for key in data[0].keys():
@@ -230,6 +229,20 @@ def collate_fn(data, pad_token, device: torch.device):
 
 
 def get_dataloaders_and_lang(common: Common, device: torch.device):
+    """
+    Given the common config and device, get the dataloaders for
+    train, dev, test and the language class.
+
+    Args:
+        common (Common): Common configuration for the project
+        device (torch.device): Device to use for tensors
+    Returns:
+        train_loader (DataLoader): DataLoader for the training set
+        dev_loader (DataLoader): DataLoader for the development set
+        test_loader (DataLoader): DataLoader for the test set
+        lang (Lang): Instance of Lang class with word2id and id2word mappings
+    """
+
     train_raw = read_file(os.path.join(common.dataset_base_path, "ptb.train.txt"))
     dev_raw = read_file(os.path.join(common.dataset_base_path, "ptb.valid.txt"))
     test_raw = read_file(os.path.join(common.dataset_base_path, "ptb.test.txt"))
@@ -280,6 +293,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 
 # Replace the default formatter with our custom one
-formatter = EmojiFormatter(datefmt="%Y-%m-%d %H:%M:%S")  # Optional: Customize timestamp
+formatter = EmojiFormatter(datefmt="%Y-%m-%d %H:%M:%S")
 for handler in logger.handlers:
     handler.setFormatter(formatter)
