@@ -37,13 +37,13 @@ class ExperimentConfig:
     """
 
     name: str = "Baseline"
-    n_runs: int = 1
+    n_runs: int = 3
     n_epochs: int = 30
     lr: float = 5e-5
     grad_clip: bool = False
     scheduler: bool = False
     log_inner: bool = True
-    patience: int = 5
+    patience: int = 3
 
 
 def load_data(path):

@@ -9,8 +9,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from tqdm import tqdm
-from utils import (Common, ExperimentConfig, Lang, get_dataloaders_and_lang,
-                   logging)
+from utils import Common, ExperimentConfig, Lang, get_dataloaders_and_lang, logging
 
 
 class NTAvSGD(torch.optim.SGD):
@@ -30,6 +29,10 @@ class NTAvSGD(torch.optim.SGD):
         self.rnn_modules = rnn_modules or []
 
     def initialize_avg_params(self):
+        """
+        Initializes the avg_params attribute with the current model parameters.
+        """
+
         self.avg_params = []
         for group in self.param_groups:
             avg_group = {}
@@ -39,15 +42,25 @@ class NTAvSGD(torch.optim.SGD):
             self.avg_params.append(avg_group)
 
     def update_avg_params(self):
+        """
+        Update the avg_params attribute with the current model parameters.
+        """
+
         for avg_group, group in zip(self.avg_params, self.param_groups):
             for param in group["params"]:
                 if param.requires_grad:
                     avg_group[param].mul_(0.5).add_(param.data, alpha=0.5)
 
     def step(self, closure=None):  # type: ignore
-        loss = None
-        if closure is not None:
-            loss = closure()
+        """
+        Standard SGD step with the addition of updating the avg_params attribute.
+
+        Args:
+            closure (callable, optional): A closure that reevaluates the model and returns the loss. Default
+
+        Returns:
+            None
+        """
 
         # Standard SGD step
         super().step(closure)
@@ -63,9 +76,16 @@ class NTAvSGD(torch.optim.SGD):
             self.flatten_rnn_parameters()
 
     def trigger(self, state=True):
+        """
+        Set the is_triggered attribute to the given state.
+        """
         self.is_triggered = state
 
     def swap_params_with_avg(self):
+        """
+        Swap the model parameters with the avg_params attribute.
+        """
+
         if self.avg_params:
             for avg_group, group in zip(self.avg_params, self.param_groups):
                 for param in group["params"]:
@@ -73,11 +93,12 @@ class NTAvSGD(torch.optim.SGD):
                         param.data, avg_group[param] = avg_group[param], param.data
 
     def flatten_rnn_parameters(self):
+        # Self-explanatory
         for rnn_module in self.rnn_modules:
             rnn_module.flatten_parameters()
 
     def state_dict(self):
-        state_dict = super(NTAvSGD, self).state_dict()
+        state_dict = super().state_dict()
         state_dict["avg_params"] = [
             {k: v.clone() for k, v in avg_group.items()}
             for avg_group in self.avg_params
@@ -95,25 +116,48 @@ class NTAvSGD(torch.optim.SGD):
 
 
 def train_loop(data, optimizer, criterion, model, clip=5):
+    """
+    Basic training loop
+
+    Args:
+        data: Dataloader
+        optimizer: torch.optim.SGD or NTAvSGD
+        criterion: torch.nn.CrossEntropyLoss
+        model: torch.nn.Module
+        clip: float, gradient clipping value
+    """
     model.train()
     loss_array = []
     number_of_tokens = []
 
     for sample in data:
-        optimizer.zero_grad()  # Zeroing the gradient
+        optimizer.zero_grad()
         output = model(sample["source"])
         loss = criterion(output, sample["target"])
         loss_array.append(loss.item() * sample["number_tokens"])
         number_of_tokens.append(sample["number_tokens"])
-        loss.backward()  # Compute the gradient, deleting the computational graph
-        # clip the gradient to avoid explosioning gradients
+        loss.backward()
+
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
-        optimizer.step()  # Update the weights
+        optimizer.step()
 
     return sum(loss_array) / sum(number_of_tokens)
 
 
 def eval_loop(data, eval_criterion, model):
+    """
+    Basic evaluation loop
+
+    Args:
+        data: Dataloader
+        eval_criterion: torch.nn.CrossEntropyLoss
+        model: torch.nn.Module
+
+    Returns:
+        perplexity: float, calculated as exp(sum(loss) / sum(number_of_tokens))
+        loss: float, average loss per token
+    """
+
     model.eval()
     loss_to_return = []
     loss_array = []
@@ -162,7 +206,12 @@ def run_experiment(
     experiment_config: ExperimentConfig,
     device: torch.device,
 ):
+    """
+    Run a single experiment with the given configuration.
+    It also creates a TensorBoard writer and logs hyperparams + results.
 
+    Args are self-explanatory and typed.
+    """
     file_name = os.path.join(
         "runs", (f"{datetime.now().strftime('%Y%m%d%H%M%S')}-{experiment_config.name}")
     )
@@ -210,7 +259,7 @@ def run_experiment(
     best_model_average: Optional[dict] = None
 
     pbar = tqdm(range(1, experiment_config.n_epochs))
-    # If the PPL is too high try to change the learning rate
+
     for epoch in pbar:
         loss = train_loop(
             train_loader, optimizer, criterion_train, model, experiment_config.clip
@@ -228,20 +277,20 @@ def run_experiment(
             losses_dev.append(np.asarray(loss_dev).mean())
             pbar.set_description("PPL: %f" % ppl_dev)
 
-            if ppl_dev < best_ppl:  # the lower, the better
+            if ppl_dev < best_ppl:
                 best_ppl = ppl_dev
                 with torch.no_grad():
                     if "T" in optimizer.__dict__:
                         optimizer.average()  # type: ignore
                         best_model_average = model.state_dict()
-                        optimizer.restore()
+                        optimizer.restore()  # type: ignore
                     best_model_state = model.state_dict()
                 patience = experiment_config.patience
             else:
                 patience -= 1
 
-            if patience <= 0:  # Early stopping with patience
-                break  # Not nice but it keeps the code clean
+            if patience <= 0:
+                break
 
             if type(optimizer) == NTAvSGD:
                 if (
@@ -251,7 +300,6 @@ def run_experiment(
                         and loss_dev
                         > min(losses_dev[: -experiment_config.non_monotonic_interval])
                     )
-                    # or (epoch > 10)
                 ) and (optimizer.is_triggered == False):
                     optimizer.trigger()
                     logging.info(f"TRIGGERED!")
@@ -276,7 +324,6 @@ def run_experiment(
         writer.add_scalar("ppl/test", final_ppl)
         writer.add_scalar("ppl/dev_final", best_ppl)
 
-        # Save the model
         model_path = os.path.join(file_name, "model.pt")
         torch.save(best_model_state, model_path)  # type: ignore
 
@@ -298,7 +345,6 @@ def run_experiment(
 
         writer.add_scalar("ppl/test_avg", final_ppl_avg)
 
-        # Save the averaged model
         model_path_avg = os.path.join(file_name, "model_avg.pt")
         torch.save(best_model_average, model_path_avg)
 
@@ -306,6 +352,11 @@ def run_experiment(
 def experiments_launcher(
     experiment_config: List[ExperimentConfig], common: Common, device: torch.device
 ):
+    """
+    Launch experiments given the list of experiments.
+
+    Args are self-explanatory and typed.
+    """
     train_loader, dev_loader, test_loader, lang = get_dataloaders_and_lang(
         common, device
     )

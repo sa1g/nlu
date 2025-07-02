@@ -23,7 +23,7 @@ class Common:
     """
 
     dataset_base_path: str = "../dataset/PennTreeBank/"
-    train_batch_size: int = 256
+    train_batch_size: int = 64
     eval_batch_size: int = 256
     test_batch_size: int = 256
 
@@ -111,6 +111,8 @@ class Lang:
         self.word2id = self.get_vocab(corpus, special_tokens)
         self.id2word = {v: k for k, v in self.word2id.items()}
 
+        print(len(self.word2id.keys()))
+
     def get_vocab(self, corpus, special_tokens=[]):
         """
         Vocab with tokens to ids
@@ -146,13 +148,8 @@ class PennTreeBank(data.Dataset):
         self.target = []
 
         for sentence in corpus:
-            self.source.append(
-                sentence.split()[0:-1]
-            )  # We get from the first token till the second-last token
-            self.target.append(
-                sentence.split()[1:]
-            )  # We get from the second token till the last token
-            # See example in section 6.2
+            self.source.append(sentence.split()[0:-1])
+            self.target.append(sentence.split()[1:])
 
         self.source_ids = self.mapping_seq(self.source, lang)
         self.target_ids = self.mapping_seq(self.target, lang)
@@ -183,9 +180,6 @@ class PennTreeBank(data.Dataset):
                     tmp_seq.append(lang.word2id[x])
                 else:
                     logger.critical("OOV found!")
-                    logger.critical(
-                        "You have to deal with that"
-                    )  # PennTreeBank doesn't have OOV but "Trust is good, control is better!"
                     break
             res.append(tmp_seq)
         return res
@@ -209,16 +203,13 @@ def collate_fn(data, pad_token, device: torch.device):
         """
         lengths = [len(seq) for seq in sequences]
         max_len = 1 if max(lengths) == 0 else max(lengths)
-        # Pad token is zero in our case
-        # So we create a matrix full of PAD_TOKEN (i.e. 0) with the shape
-        # batch_size X maximum length of a sequence
+
         padded_seqs = torch.LongTensor(len(sequences), max_len).fill_(pad_token)
         for i, seq in enumerate(sequences):
             end = lengths[i]
-            padded_seqs[i, :end] = seq  # We copy each sequence into the matrix
-        padded_seqs = (
-            padded_seqs.detach()
-        )  # We remove these tensors from the computational graph
+            padded_seqs[i, :end] = seq
+        padded_seqs = padded_seqs.detach()
+
         return padded_seqs, lengths
 
     # Sort data by seq lengths
@@ -238,6 +229,20 @@ def collate_fn(data, pad_token, device: torch.device):
 
 
 def get_dataloaders_and_lang(common: Common, device: torch.device):
+    """
+    Given the common config and device, get the dataloaders for
+    train, dev, test and the language class.
+
+    Args:
+        common (Common): Common configuration for the project
+        device (torch.device): Device to use for tensors
+    Returns:
+        train_loader (DataLoader): DataLoader for the training set
+        dev_loader (DataLoader): DataLoader for the development set
+        test_loader (DataLoader): DataLoader for the test set
+        lang (Lang): Instance of Lang class with word2id and id2word mappings
+    """
+
     train_raw = read_file(os.path.join(common.dataset_base_path, "ptb.train.txt"))
     dev_raw = read_file(os.path.join(common.dataset_base_path, "ptb.valid.txt"))
     test_raw = read_file(os.path.join(common.dataset_base_path, "ptb.test.txt"))

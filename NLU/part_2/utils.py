@@ -140,12 +140,18 @@ class IntentsAndSlots(Dataset):
 
             # If all word_ids are the same, it means the word is a single token
             # so we have to <pad> the slot_ids which are not the first one
-            if len(set(word_ids)) == 1:
+            # if len(set(word_ids)) == 1:
+            #     slots.extend([label])
+            #     slots.extend([self.pad_token_id] * (len(utt) - 1))  # type: ignore
+            # else:
+            #     # otherwise, we can copy the slot_id for all the tokens of the "word"
+            #     slots.extend([label] * len(utt))  # type: ignore
+
+            if len(word_ids) > 1:
                 slots.extend([label])
                 slots.extend([self.pad_token_id] * (len(utt) - 1))  # type: ignore
             else:
-                # otherwise, we can copy the slot_id for all the tokens of the "word"
-                slots.extend([label] * len(utt))  # type: ignore
+                slots.extend([label])
 
         tokenized_sentence = torch.tensor(tokenized_sentence)
         attention_mask = torch.tensor(attention_mask)

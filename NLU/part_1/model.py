@@ -42,21 +42,18 @@ class ModelIAS(nn.Module):
         self.bidirectional = bidirectional
 
     def forward(self, utterance, seq_lengths):
-        # utterance.size() = batch_size X seq_len
-        utt_emb = self.embedding(
-            utterance
-        )  # utt_emb.size() = batch_size X seq_len X emb_size
-        utt_emb = self.emb_dropout(utt_emb)  # Apply dropout to the embeddings
+        utt_emb = self.embedding(utterance)
+        utt_emb = self.emb_dropout(utt_emb)
 
         # pack_padded_sequence avoid computation over pad tokens reducing the computational cost
         packed_input = pack_padded_sequence(
             utt_emb, seq_lengths.cpu().numpy(), batch_first=True
         )
         # Process the batch
-        packed_output, (last_hidden, cell) = self.utt_encoder(packed_input)
+        packed_output, (last_hidden, _) = self.utt_encoder(packed_input)
 
         # Unpack the sequence
-        utt_encoded, input_sizes = pad_packed_sequence(packed_output, batch_first=True)
+        utt_encoded, _ = pad_packed_sequence(packed_output, batch_first=True)
 
         # Get the last hidden state
         if self.bidirectional:
@@ -64,7 +61,6 @@ class ModelIAS(nn.Module):
         else:
             last_hidden = last_hidden[-1, :, :]
 
-        # Is this another possible way to get the last hiddent state? (Why?)
         utt_encoded = self.out_dropout(utt_encoded)
         last_hidden = self.out_dropout(last_hidden)
 
@@ -73,5 +69,5 @@ class ModelIAS(nn.Module):
         # Compute intent logits
         intent = self.intent_out(last_hidden)
 
-        slots = slots.permute(0, 2, 1)  # We need this for computing the loss
+        slots = slots.permute(0, 2, 1)
         return slots, intent

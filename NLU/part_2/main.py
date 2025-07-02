@@ -14,8 +14,55 @@ if __name__ == "__main__":
 
     experiment_config = [
         ExperimentConfig(
-            name="prova", lr=0.0001, scheduler=True, grad_clip=True, n_epochs=10
+            name="5e-5",
+            lr=5e-5,
+            scheduler=False,
+            grad_clip=False,
+            n_epochs=10,
+            n_runs=3,
+        ),
+        ExperimentConfig(
+            name="3e-5",
+            lr=3e-5,
+            scheduler=False,
+            grad_clip=False,
+            n_epochs=10,
+            n_runs=3,
+        ),
+        ExperimentConfig(
+            name="2e-5",
+            lr=2e-5,
+            scheduler=False,
+            grad_clip=False,
+            n_epochs=10,
+            n_runs=3,
+        ),
+        ExperimentConfig(
+            name="5e-5-Sch",
+            lr=5e-5,
+            scheduler=True,
+            grad_clip=False,
+            n_epochs=10,
+            n_runs=3,
+        ),
+        ExperimentConfig(
+            name="5e-5-Clip",
+            lr=5e-5,
+            scheduler=False,
+            grad_clip=True,
+            n_epochs=10,
+            n_runs=3,
+        ),
+        ExperimentConfig(
+            name="5e-5-SchClip",
+            lr=5e-5,
+            scheduler=True,
+            grad_clip=True,
+            n_epochs=10,
+            n_runs=3,
         ),
     ]
 
     experiment_launcher(experiment_config, common, device)
+
+# https://arxiv.org/pdf/1810.04805

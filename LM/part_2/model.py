@@ -25,7 +25,7 @@ class VariationalDropout(nn.Module):
     Apply the same dropout mask across the time dimension.
 
     [Paper](https://arxiv.org/abs/1512.05287) -
-    [Source](https://github.com/keitakurita/Better_LSTM_PyTorch/blob/master/better_lstm/model.py)
+    [Inspired by](https://github.com/keitakurita/Better_LSTM_PyTorch/blob/master/better_lstm/model.py)
     """
 
     def __init__(self, dropout: float = 0.0, batch_first: Optional[bool] = False):
@@ -49,8 +49,6 @@ class VariationalDropout(nn.Module):
             )
         # Apply the mask
         x = x.masked_fill(mask == 0, 0) / (1 - self.dropout)
-        # The scaling factor (1 - self.dropout) is applied to maintain the expected value of
-        # the activations.
 
         return x
 
@@ -82,8 +80,7 @@ class LM_LSTM(ModelApi):
         )
         self.output = nn.Linear(hidden_size, output_size)
 
-        # Batch first as our data is batch_first
-        # we apply variational dropout on the "token" dimension
+        # We apply variational dropout on the time dimension
         self.emb_dropout = VariationalDropout(emb_dropout, batch_first=True)
         self.out_dropout = VariationalDropout(out_dropout, batch_first=True)
 
@@ -96,7 +93,10 @@ class LM_LSTM(ModelApi):
     def forward(self, input_sequence):
         emb = self.embedding(input_sequence)
         emb = self.emb_dropout(emb)
+        
         lstm_out, _ = self.lstm(emb)
         lstm_out = self.out_dropout(lstm_out)
+        
         output = self.output(lstm_out).permute(0, 2, 1)
+
         return output

@@ -13,8 +13,13 @@ if __name__ == "__main__":
     common = Common()
 
     experiment_config = [
+        ExperimentConfig(name="5e-5", lr=5e-5, n_epochs=10),
+        ExperimentConfig(name="3e-5", lr=3e-5, n_epochs=10),
+        ExperimentConfig(name="2e-5", lr=2e-5, n_epochs=10),
+        ExperimentConfig(name="5e-5-Sch", lr=5e-5, scheduler=True, n_epochs=10),
+        ExperimentConfig(name="5e-5-Clip", lr=5e-5, grad_clip=True, n_epochs=10),
         ExperimentConfig(
-            name="new", lr=5e-5, scheduler=False, grad_clip=False, n_epochs=10
+            name="5e-5-SchClip", lr=5e-5, scheduler=True, grad_clip=True, n_epochs=10
         ),
     ]
 

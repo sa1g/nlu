@@ -14,8 +14,7 @@ from sklearn.metrics import classification_report
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from tqdm import tqdm
-from utils import (PAD_TOKEN, Common, ExperimentConfig, Lang,
-                   get_dataloaders_and_lang)
+from utils import PAD_TOKEN, Common, ExperimentConfig, Lang, get_dataloaders_and_lang
 
 
 def init_weights(mat):
@@ -155,7 +154,7 @@ def run_experiment(
     losses_train = []
     losses_dev = []
     sampled_epochs = []
-    best_f1 = 0
+    best_f1 = -np.inf
 
     for x in tqdm(range(1, experiment_config.n_epochs)):
         loss = train_loop(

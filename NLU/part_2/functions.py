@@ -14,8 +14,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
-from utils import (Batch, Common, ExperimentConfig, Lang,
-                   get_dataloaders_and_lang)
+from utils import Batch, Common, ExperimentConfig, Lang, get_dataloaders_and_lang
 
 
 def calculate_loss(
@@ -200,7 +199,7 @@ def run_experiment(
             optimizer,
             num_warmup_steps=(
                 int(0.1 * experiment_config.n_epochs)
-                if experiment_config.n_epochs > 4
+                if experiment_config.n_epochs > 10
                 else 4
             ),
             num_training_steps=experiment_config.n_epochs * len(train_loader),
