@@ -30,7 +30,6 @@ class ModelIAS(nn.Module):
             batch_first=True,
         )
         self.out_dropout = nn.Dropout(out_dropout)
-        # Dropout layer How/Where do we apply it?
 
         bidirectional_multiplier = 2 if bidirectional else 1
         # If bidirectional, we need to multiply the hidden size by 2

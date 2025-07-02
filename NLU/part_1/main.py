@@ -1,4 +1,3 @@
-# Global variables
 import os
 
 import torch

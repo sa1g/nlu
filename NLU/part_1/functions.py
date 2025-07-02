@@ -1,5 +1,3 @@
-# Add the class of your model only
-# Here is where you define the architecture of your model using pytorch
 import logging
 import os
 from datetime import datetime
@@ -41,6 +39,16 @@ def init_weights(mat):
 
 
 def train_loop(data, optimizer, criterion_slots, criterion_intents, model, clip=5):
+    """
+    Basic training loop
+
+    Args:
+        data: Dataloader
+        optimizer: torch.optim.SGD or NTAvSGD
+        criterion: torch.nn.CrossEntropyLoss
+        model: torch.nn.Module
+        clip: float, gradient clipping value
+    """
     model.train()
     loss_array = []
     for sample in data:
@@ -59,6 +67,19 @@ def train_loop(data, optimizer, criterion_slots, criterion_intents, model, clip=
 
 
 def eval_loop(data, criterion_slots, criterion_intents, model, lang):
+    """
+    Basic evaluation loop
+
+    Args:
+        data: Dataloader
+        eval_criterion: torch.nn.CrossEntropyLoss
+        model: torch.nn.Module
+
+    Returns:
+        perplexity: float, calculated as exp(sum(loss) / sum(number_of_tokens))
+        loss: float, average loss per token
+    """
+
     model.eval()
     loss_array = []
 
@@ -67,14 +88,15 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
 
     ref_slots = []
     hyp_slots = []
-    # softmax = nn.Softmax(dim=1) # Use Softmax if you need the actual probability
-    with torch.no_grad():  # It used to avoid the creation of computational graph
+
+    with torch.no_grad():
         for sample in data:
             slots, intents = model(sample["utterances"], sample["slots_len"])
             loss_intent = criterion_intents(intents, sample["intents"])
             loss_slot = criterion_slots(slots, sample["y_slots"])
             loss = loss_intent + loss_slot
             loss_array.append(loss.item())
+
             # Intent inference
             # Get the highest probable class
             out_intents = [
@@ -104,10 +126,10 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
         results = evaluate(ref_slots, hyp_slots)
     except Exception as ex:
         # Sometimes the model predicts a class that is not in REF
-        print("Warning:", ex)
+        logging.warning("Warning:", ex)
         ref_s = set([x[1] for x in ref_slots])
         hyp_s = set([x[1] for x in hyp_slots])
-        print(hyp_s.difference(ref_s))
+        logging.warning(hyp_s.difference(ref_s))
         results = {"total": {"f": 0}}
 
     report_intent = classification_report(
@@ -126,6 +148,12 @@ def run_experiment(
     writer: SummaryWriter,
     file_name: str = "",
 ):
+    """
+    Run a single experiment with the given configuration.
+    It also creates a TensorBoard writer and logs hyperparams + results.
+
+    Args are self-explanatory and typed.
+    """
 
     out_slot = len(lang.slot2id)
     out_int = len(lang.intent2id)
@@ -168,7 +196,7 @@ def run_experiment(
         if experiment_config.log_inner:
             writer.add_scalar("loss/train", np.asarray(loss).mean(), x)
 
-        if x % 5 == 0:  # We check the performance every 5 epochs
+        if x % 5 == 0:
             sampled_epochs.append(x)
             losses_train.append(np.asarray(loss).mean())
             results_dev, intent_res, loss_dev = eval_loop(
@@ -182,17 +210,16 @@ def run_experiment(
                 writer.add_scalar("dev/intent_acc_dev", intent_res["accuracy"], x)  # type: ignore
 
             f1 = results_dev["total"]["f"]
-            # For decreasing the patience you can also use the average between slot f1 and intent accuracy
+
             if f1 > best_f1:
                 best_f1 = f1
-                # Here you should save the model
                 patience = experiment_config.patience
                 with torch.no_grad():
                     best_model_state = model.state_dict()
             else:
                 patience -= 1
-            if patience <= 0:  # Early stopping with patience
-                break  # Not nice but it keeps the code clean
+            if patience <= 0:
+                break
 
     if best_model_state is not None:
         model.load_state_dict(best_model_state)
@@ -210,6 +237,11 @@ def run_experiment(
 def experiment_launcher(
     experiment_config: List[ExperimentConfig], common: Common, device: torch.device
 ):
+    """
+    Launch experiments given the list of experiments.
+
+    Args are self-explanatory and typed.
+    """
     train_loader, dev_loader, test_loader, lang = get_dataloaders_and_lang(
         common, device=device
     )

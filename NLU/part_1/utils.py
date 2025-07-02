@@ -91,7 +91,6 @@ class Lang:
 
 
 class IntentsAndSlots(Dataset):
-    # Mandatory methods are __init__, __len__ and __getitem__
     def __init__(self, dataset, lang, unk="unk"):
         self.utterances = []
         self.intents = []
@@ -116,8 +115,6 @@ class IntentsAndSlots(Dataset):
         intent = self.intent_ids[idx]
         sample = {"utterance": utt, "slots": slots, "intent": intent}
         return sample
-
-    # Auxiliary methods
 
     def mapping_lab(self, data, mapper):
         return [mapper[x] if x in mapper else mapper[self.unk] for x in data]
@@ -182,6 +179,19 @@ def get_dataloaders_and_lang(
     config: Common,
     device: torch.device,
 ) -> tuple[DataLoader, DataLoader, DataLoader, Lang]:
+    """
+    Given the common config and device, get the dataloaders for
+    train, dev, test and the language class.
+
+    Args:
+        common (Common): Common configuration for the project
+        device (torch.device): Device to use for tensors
+    Returns:
+        train_loader (DataLoader): DataLoader for the training set
+        dev_loader (DataLoader): DataLoader for the development set
+        test_loader (DataLoader): DataLoader for the test set
+        lang (Lang): Instance of Lang class with word2id and id2word mappings
+    """
     tmp_train_raw = load_data(os.path.join(config.dataset_base_path, "train.json"))
     test_raw = load_data(os.path.join(config.dataset_base_path, "test.json"))
 
@@ -189,11 +199,9 @@ def get_dataloaders_and_lang(
     logging.debug(f"Test samples: {len(test_raw)}")
     logging.debug(f"Train samples: {tmp_train_raw[0]}")
 
-    # First we get the 10% of the training set, then we compute the percentage of these examples
-
     portion = 0.10
 
-    intents = [x["intent"] for x in tmp_train_raw]  # We stratify on intents
+    intents = [x["intent"] for x in tmp_train_raw]  # stratify on intents
     count_y = Counter(intents)
 
     labels = []
@@ -230,8 +238,8 @@ def get_dataloaders_and_lang(
     words = sum(
         [x["utterance"].split() for x in train_raw], []
     )  # No set() since we want to compute the cutoff
-    corpus = train_raw + dev_raw + test_raw  # We do not wat unk labels,
-    # however this depends on the research purpose
+    corpus = train_raw + dev_raw + test_raw
+
     slots = set(sum([line["slots"].split() for line in corpus], []))
     intents = set([line["intent"] for line in corpus])
 
@@ -242,7 +250,6 @@ def get_dataloaders_and_lang(
     dev_dataset = IntentsAndSlots(dev_raw, lang)
     test_dataset = IntentsAndSlots(test_raw, lang)
 
-    # Dataloader instantiations
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.train_batch_size,
