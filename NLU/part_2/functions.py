@@ -14,7 +14,8 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
-from utils import Batch, Common, ExperimentConfig, Lang, get_dataloaders_and_lang
+from utils import (Batch, Common, ExperimentConfig, Lang,
+                   get_dataloaders_and_lang)
 
 
 def calculate_loss(
@@ -23,28 +24,19 @@ def calculate_loss(
     slot_logits: torch.Tensor,
     intent_logits: torch.Tensor,
 ):
-    intent_count = Counter(batch.intents.tolist())
-    intent_weights = (
-        torch.tensor([1 / (intent_count[x] + 1) for x in lang.id2intent.keys()])
-        .float()
-        .to(intent_logits.device)
-    )
-    criterion_intents = nn.CrossEntropyLoss(weight=intent_weights)
-    loss_intent = criterion_intents(intent_logits, batch.intents)
+    # Target loss
+    slot_targets = batch.y_slots.view(-1)
 
-    slot_count = Counter(batch.y_slots.flatten().tolist())
-    slot_weights = (
-        torch.tensor([1 / (slot_count[x] + 1) for x in lang.id2slot.keys()])
-        .float()
-        .to(slot_logits.device)
-    )
-    criterion_slots = torch.nn.CrossEntropyLoss(
-        weight=slot_weights, ignore_index=lang.pad_token  # type: ignore
-    )
+    criterion_slots = nn.CrossEntropyLoss(ignore_index=lang.slot2id["pad"])
 
-    loss_slot = criterion_slots(
-        slot_logits.view(-1, len(lang.id2slot)), batch.y_slots.view(-1)
-    )
+    slot_logits = slot_logits.view(-1, len(lang.slot2id))
+    loss_slot = criterion_slots(slot_logits, slot_targets)
+
+    # Intent loss
+    intent_targets = batch.intents
+    criterion_intents = nn.CrossEntropyLoss()
+    intent_logits = intent_logits.view(-1, len(lang.intent2id))
+    loss_intent = criterion_intents(intent_logits, intent_targets)
 
     loss = loss_intent + loss_slot
 
@@ -59,6 +51,12 @@ def train_loop(
     scheduler,
     grad_clip: bool,
 ):
+    """
+    Basic training loop
+
+    Args:
+        are typed.
+    """
     model.train()
     loss_array = []
     sample: Batch
@@ -86,6 +84,12 @@ def train_loop(
 
 
 def eval_loop(model: IntentSlotModel, data: DataLoader, lang: Lang):
+    """
+    Basic evaluation loop
+
+    Args:
+        are typed.
+    """
     model.eval()
     loss_array = []
 
@@ -153,13 +157,11 @@ def eval_loop(model: IntentSlotModel, data: DataLoader, lang: Lang):
         f1_slot = evaluate(ref_slots, hyp_slots)
     except Exception as ex:
         # Sometimes the model predicts a class that is not in REF
-        print("\nWarning:", ex)
+        logging.warning("\nWarning:", ex)
         ref_s = set([x[1] for x in ref_slots])
         hyp_s = set([x[1] for x in hyp_slots])
-        print(hyp_s.difference(ref_s))
+        logging.warning(hyp_s.difference(ref_s))
         f1_slot = {"total": {"f": 0}}
-
-    print(f1_slot["total"]["f"])
 
     accuracy_intention = classification_report(  # type: ignore
         ref_intents,
@@ -167,8 +169,6 @@ def eval_loop(model: IntentSlotModel, data: DataLoader, lang: Lang):
         output_dict=True,
         zero_division=False,
     )["accuracy"]
-
-    print(f"Intent accuracy: {accuracy_intention:.4f}")
 
     return float(f1_slot["total"]["f"]), float(accuracy_intention), loss_array
 
@@ -183,6 +183,12 @@ def run_experiment(
     writer: SummaryWriter,
     file_name: str = "",
 ):
+    """
+    Run a single experiment with the given configuration.
+    It also creates a TensorBoard writer and logs hyperparams + results.
+
+    Args are self-explanatory and typed.
+    """
 
     model = IntentSlotModel(
         slot_len=len(lang.slot2id), intent_len=len(lang.intent2id)
@@ -260,6 +266,12 @@ def run_experiment(
 def experiment_launcher(
     experiment_config: List[ExperimentConfig], common: Common, device: torch.device
 ):
+    """
+    Launch experiments given the list of experiments.
+
+    Args are self-explanatory and typed.
+    """
+
     train_loader, dev_loader, test_loader, lang = get_dataloaders_and_lang(
         common, device=device
     )

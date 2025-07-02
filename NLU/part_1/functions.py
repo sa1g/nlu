@@ -12,7 +12,8 @@ from sklearn.metrics import classification_report
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from tqdm import tqdm
-from utils import PAD_TOKEN, Common, ExperimentConfig, Lang, get_dataloaders_and_lang
+from utils import (PAD_TOKEN, Common, ExperimentConfig, Lang,
+                   get_dataloaders_and_lang)
 
 
 def init_weights(mat):

@@ -37,6 +37,20 @@ def train_loop(
     scheduler,
     grad_clip: bool,
 ):
+    """
+    Basic training loop
+
+    Args:
+        data: Dataloader
+        optimizer: torch.optim.SGD or NTAvSGD
+        model: torch.nn.Module
+        lang: Lang object containing slot2id and pad_token
+        scheduler
+        grad_clip: Whether to apply gradient clipping
+    Returns:
+        loss_array: List of losses for each batch
+    """
+
     model.train()
     loss_array = []
     sample: Batch
@@ -61,89 +75,21 @@ def train_loop(
         if scheduler:
             scheduler.step()
 
-    # avg first step 0.13
     return loss_array
-
-
-def tag2ts1(ts_tag_sequence):
-    """
-    Transform ts tag sequence to target spans
-    :param ts_tag_sequence: tag sequence with 'T' and 'O'
-    :return: List of (start, end) tuples for target spans
-    """
-    n_tags = len(ts_tag_sequence)
-    ts_sequence = []
-    beg, end = -1, -1
-    for i in range(n_tags):
-        ts_tag = ts_tag_sequence[i]
-        if ts_tag == "T":
-            if beg == -1:
-                beg = i
-            end = i
-        elif ts_tag == "O" and beg != -1:
-            ts_sequence.append((beg, end))
-            beg, end = -1, -1
-    if beg != -1:
-        ts_sequence.append((beg, end))
-    return ts_sequence
-
-
-def match_ts1(gold_ts_sequence, pred_ts_sequence):
-    """
-    Calculate the number of correctly predicted target spans
-    :param gold_ts_sequence: gold standard target spans
-    :param pred_ts_sequence: predicted target spans
-    :return: hit_count, gold_count, pred_count
-    """
-    hit_count = 0
-    gold_count = len(gold_ts_sequence)
-    pred_count = len(pred_ts_sequence)
-
-    for t in pred_ts_sequence:
-        if t in gold_ts_sequence:
-            hit_count += 1
-
-    return hit_count, gold_count, pred_count
-
-
-def evaluate_ts1(gold_ts, pred_ts):
-    """
-    Evaluate the model performance for the binary tagging task
-    :param gold_ts: gold standard ts tags
-    :param pred_ts: predicted ts tags
-    :return: Precision, Recall, F1 scores
-
-    Adapted from:
-    https://github.com/lixin4ever/E2E-TBSA/blob/master/evals.py#L51
-    """
-    assert len(gold_ts) == len(pred_ts)
-    n_samples = len(gold_ts)
-
-    n_tp_ts, n_gold_ts, n_pred_ts = 0, 0, 0
-
-    for i in range(n_samples):
-        g_ts_sequence = tag2ts1(ts_tag_sequence=gold_ts[i])
-        p_ts_sequence = tag2ts1(ts_tag_sequence=pred_ts[i])
-
-        hit_ts_count, gold_ts_count, pred_ts_count = match_ts1(
-            gold_ts_sequence=g_ts_sequence, pred_ts_sequence=p_ts_sequence
-        )
-
-        n_tp_ts += hit_ts_count
-        n_gold_ts += gold_ts_count
-        n_pred_ts += pred_ts_count
-
-    precision = float(n_tp_ts) / (n_pred_ts + 1e-4)
-    recall = float(n_tp_ts) / (n_gold_ts + 1e-4)
-    f1_score = 2 * precision * recall / (precision + recall + 1e-4)
-
-    return precision, recall, f1_score
 
 
 def evaluate_ts_simple(gold_sequences, pred_sequences):
     """
     Simplified TS evaluation for nested lists (e.g., [['O', 'T'], ['O']]).
+
+    Args:
+        gold_sequences (list of list): List of gold sequences, each sequence is a list of tags.
+        pred_sequences (list of list): List of predicted sequences, each sequence is a list of tags.
+
     Returns: macro_f1, micro_p, micro_r, micro_f1
+
+    Inspired by [script](https://github.com/lixin4ever/E2E-TBSA/blob/master/evals.py).
+
     """
     counts = defaultdict(lambda: {"tp": 0, "gold": 0, "pred": 0})
 
@@ -244,6 +190,12 @@ def run_experiment(
     writer: SummaryWriter,
     file_name: str = "",
 ):
+    """
+    Run a single experiment with the given configuration.
+    It also creates a TensorBoard writer and logs hyperparams + results.
+
+    Args are self-explanatory and typed.
+    """
 
     model = SlotModel(slot_len=len(lang.slot2id)).to(device)
 
@@ -320,6 +272,12 @@ def run_experiment(
 def experiment_launcher(
     experiment_config: List[ExperimentConfig], common: Common, device: torch.device
 ):
+    """
+    Launch experiments given the list of experiments.
+
+    Args are self-explanatory and typed.
+    """
+
     train_loader, dev_loader, test_loader, lang = get_dataloaders_and_lang(
         common, device=device
     )

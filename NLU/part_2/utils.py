@@ -68,10 +68,10 @@ class Lang:
 
         self.slot2id = self.lab2id(slots)
         self.intent2id = self.lab2id(intents, pad=False)
+        self.id2intent = {v: k for k, v in self.intent2id.items()}
 
         self.id2slot = {v: k for k, v in self.slot2id.items()}
         self.id2slot[self.pad_token] = "O"  # Ensure pad token is mapped to "O"
-        self.id2intent = {v: k for k, v in self.intent2id.items()}
 
     def lab2id(self, elements, pad=True):
         vocab = {}
@@ -116,12 +116,7 @@ class IntentsAndSlots(Dataset):
 
     def preprocess(self, phrase, slot_ids, intent_ids, i):
         """
-        Prendo una frase, i suoi slot e il suo intent.
-
-        Quando la frase viene tokenizzata, e' possibile che ci siano subtokens. Quindi
-        devo mappare gli slot cosi' che quando ho subtoken, il primo subtoken abbia l'id corretto,
-        mentre i successivi siano padding. Cosi' non sminchiano il significato degli slot,
-        ne l'accuratezza e non vengono calcolati nella loss, ne' nella valutazione.
+        Set subtoken ids to pad, except for the first one.
         """
 
         tokenized_sentence = []
@@ -204,16 +199,13 @@ def collate_fn(batch: List[Sample], device: torch.device):
         """
         lengths = [len(seq) for seq in sequences]
         max_len = 1 if max(lengths) == 0 else max(lengths)
-        # Pad token is zero in our case
-        # So we create a matrix full of PAD_TOKEN (i.e. 0) with the shape
-        # batch_size X maximum length of a sequence
+
         padded_seqs = torch.LongTensor(len(sequences), max_len).fill_(PAD_TOKEN)
         for i, seq in enumerate(sequences):
             end = lengths[i]
-            padded_seqs[i, :end] = seq  # We copy each sequence into the matrix
-        padded_seqs = (
-            padded_seqs.detach()
-        )  # We remove these tensors from the computational graph
+            padded_seqs[i, :end] = seq
+        padded_seqs = padded_seqs.detach()
+
         return padded_seqs, lengths
 
     # Sort batch by sequence lengths (descending order)
@@ -261,6 +253,19 @@ def get_dataloaders_and_lang(
     config: Common,
     device: torch.device,
 ) -> tuple[DataLoader, DataLoader, DataLoader, Lang]:
+    """
+    Given the common config and device, get the dataloaders for
+    train, dev, test and the language class.
+
+    Args:
+        common (Common): Common configuration for the project
+        device (torch.device): Device to use for tensors
+    Returns:
+        train_loader (DataLoader): DataLoader for the training set
+        dev_loader (DataLoader): DataLoader for the development set
+        test_loader (DataLoader): DataLoader for the test set
+        lang (Lang): Instance of Lang class with word2id and id2word mappings
+    """
     tmp_train_raw = load_data(os.path.join(config.dataset_base_path, "train.json"))
     test_raw = load_data(os.path.join(config.dataset_base_path, "test.json"))
 
@@ -330,14 +335,6 @@ def get_dataloaders_and_lang(
         batch_size=config.test_batch_size,
         collate_fn=lambda x: collate_fn(x, device=device),
     )
-
-    # for sample in train_loader:
-    #     print(f"utterance: {sample.utterances.shape}")
-    #     print(f"attention_mask: {sample.attention_masks.shape}")
-    #     print(f"slots: {sample.y_slots.shape}")
-    #     print(f"slots_len: {sample.slots_len.shape}")
-    #     print(f"intent: {sample.intents.shape}")
-    #     exit()
 
     return train_loader, dev_loader, test_loader, lang
 

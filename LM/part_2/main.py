@@ -1,7 +1,7 @@
 import numpy as np
 import torch
-from torch.optim import SGD
 from functions import NTAvSGD, experiments_launcher
+from torch.optim import SGD
 from utils import Common, ExperimentConfig
 
 # Seeding

@@ -64,5 +64,3 @@ if __name__ == "__main__":
     ]
 
     experiment_launcher(experiment_config, common, device)
-
-# https://arxiv.org/pdf/1810.04805
