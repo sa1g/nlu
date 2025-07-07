@@ -1,137 +1,89 @@
-import random
-
 import numpy as np
 import torch
-from functions import (
-    get_model,
-    get_optimizer,
-    init_weights,
-    train,
-    get_loaders_lang,
-)
-from torch.utils.tensorboard import SummaryWriter
-import logging
-import json
+from functions import NTAvSGD, experiments_launcher
+from torch.optim import SGD
+from utils import Common, ExperimentConfig
 
-logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.DEBUG)
-
-
-import argparse
-
-parser = argparse.ArgumentParser()
-
-parser.add_argument("-c", default="config.json", help="Config file json")
-
-
-def main(
-    train_config: dict, model_config: dict, optimizer_config: dict, experiment_name: str
-):
-    """
-    Main function to set up data loaders, model, and initiate training.
-    Args:
-        train_config (dict): Configuration dictionary for training parameters.
-        model_config (dict): Configuration dictionary for model parameters.
-        optimizer_config (dict): Configuration dictionary for optimizer parameters.
-        experiment_name (str): Name of the experiment for logging purposes.
-    Returns:
-        None
-    """
-
-    train_loader, dev_loader, test_loader, lang = get_loaders_lang(
-        train_config["dataset_path"],
-        train_config["train_batch_size"],
-        train_config["dev_batch_size"],
-        train_config["test_batch_size"],
-    )
-
-    vocab_len = len(lang.word2id)
-    pad_index = lang.word2id["<pad>"]
-    output_size = vocab_len
-
-    model_config["output_size"] = output_size
-    model_config["pad_index"] = pad_index
-    model_config["device"] = DEVICE
-    model_config["init_weights"] = init_weights
-
-    # MODEL SETUP
-    model = get_model(model_config, DEVICE)
-
-    logging.debug("Model done")
-
-    # TENSORBOARD
-    writer: SummaryWriter = SummaryWriter(log_dir=f"log/{experiment_name}")
-
-    # TRAINING
-    train(
-        model=model,
-        optimizer_config=optimizer_config,
-        lang=lang,
-        writer=writer,
-        n_epochs=train_config["n_epochs"],
-        clip=train_config["clip"],
-        train_loader=train_loader,
-        dev_loader=dev_loader,
-        test_loader=test_loader,
-        device=DEVICE,
-        patience=train_config["patience"],
-    )
-
-
-def load_config(config_file):
-    """
-    Load the configuration file.
-    """
-    with open(config_file, "r") as file:
-        configs = json.load(file)
-    return configs
-
+# Seeding
+torch.manual_seed(42)
+np.random.seed(42)
 
 if __name__ == "__main__":
-    torch.manual_seed(42)
-    np.random.seed(42)
-    random.seed(42)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    common = Common()
 
-    DEVICE = "cuda:0"
+    experiments = [
+        ExperimentConfig(
+            name="wt20",
+            lr=2.0,
+            hid_size=300,
+            weight_tying=True,
+            optim=SGD,
+        ),
+        ExperimentConfig(
+            name="wt30",
+            lr=3.0,
+            hid_size=300,
+            weight_tying=True,
+            optim=SGD,
+        ),
+        ExperimentConfig(
+            name="wt40",
+            lr=4.0,
+            hid_size=300,
+            weight_tying=True,
+            optim=SGD,
+        ),
+        ExperimentConfig(
+            name="30DropEmb",
+            lr=3.0,
+            hid_size=300,
+            weight_tying=True,
+            dropout_embedding=0.5,
+            optim=SGD,
+        ),
+        ExperimentConfig(
+            name="20DropOut",
+            lr=2.0,
+            hid_size=300,
+            weight_tying=True,
+            dropout_output=0.5,
+            optim=SGD,
+        ),
+        ExperimentConfig(
+            name="30DropOut",
+            lr=3.0,
+            hid_size=300,
+            weight_tying=True,
+            dropout_output=0.5,
+            optim=SGD,
+        ),
+        ExperimentConfig(
+            name="40DropOut",
+            lr=4.0,
+            hid_size=300,
+            weight_tying=True,
+            dropout_output=0.5,
+            optim=SGD,
+        ),
+        ExperimentConfig(
+            name="50DropOut",
+            lr=5.0,
+            hid_size=300,
+            weight_tying=True,
+            dropout_output=0.5,
+            optim=SGD,
+        ),
+        ExperimentConfig(
+            name="50NTAvSGD",
+            lr=5.0,
+            hid_size=300,
+            weight_tying=True,
+            dropout_output=0.5,
+            optim=NTAvSGD,
+            patience=5,
+            non_monotonic_interval=3,
+        ),
+    ]
 
-    args = parser.parse_args()
-    config: dict = load_config(args.c)
-
-    for key, config in config.items():
-        logging.info(" !! Running %s !! ", key)
-        assert config.get("model_type", "LM_RNN") in ["LM_RNN", "LM_LSTM"]
-        assert config.get("optim_name", "SGD") in ["SGD", "AdamW", "NTAvSGD"]
-
-        train_config = {
-            "dataset_path": config.get("dataset_path", "../dataset"),
-            "train_batch_size": config.get("train_batch_size", 128),
-            "dev_batch_size": config.get("dev_batch_size", 128),
-            "test_batch_size": config.get("test_batch_size", 128),
-            "n_epochs": config.get("n_epochs", 1),
-            "clip": config.get("clip", 5),
-            "patience": config.get("patience", 5),
-        }
-
-        model_config = {
-            "emb_size": config.get("emb_size", 300),
-            "hid_size": config.get("hid_size", 300),
-            "emb_dropout": config.get("emb_dropout", 0),
-            "out_dropout": config.get("out_dropout", 0),
-            "n_layers": config.get("n_layers", 1),
-            "model_type": config.get("model_type", "LM_RNN"),
-            "variational_dropout": config.get("variational_dropout", 0),
-            "weight_tying": config.get("weight_tying", False),
-            "optim_name": config.get("optim_name", "SGD"),
-        }
-
-        optimizer_config = {
-            "optim_name": config.get("optim_name", "SGD"),
-            "lr": config.get("lr", 0.0001),
-            "betas": config.get("betas", (0.9, 0.999)),
-            "eps": config.get("eps", 1e-08),
-            "weight_decay": config.get("weight_decay", 0.01),
-            "momentum": config.get("momentum", 0),
-            "non_monotonic_interval": config.get("non_monotonic_interval", 5),
-            "logging_interval": config.get("train_batch_size", 128),
-        }
-
-        main(train_config, model_config, optimizer_config, experiment_name=key)
+    experiments_launcher(experiment_config=experiments, common=common, device=device)

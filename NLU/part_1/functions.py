@@ -1,72 +1,55 @@
-# Add the class of your model only
-# Here is where you define the architecture of your model using pytorch
-import copy
 import logging
 import os
-from matplotlib import pyplot as plt
+from datetime import datetime
+from typing import List, Optional
+
 import numpy as np
-import torch.nn as nn
-from tqdm import tqdm
-from model import ModelIAS
-from utils import Lang
-from conll import evaluate
 import torch
-from torch.utils.data import DataLoader
+import torch.nn as nn
+from conll import evaluate
+from model import ModelIAS
 from sklearn.metrics import classification_report
-from torch import optim
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter  # type: ignore
+from tqdm import tqdm
+from utils import (PAD_TOKEN, Common, ExperimentConfig, Lang,
+                   get_dataloaders_and_lang)
 
 
 def init_weights(mat):
-    """
-    Initialize the weights of the given model.
-    This function initializes the weights of the modules in the given model
-    using different strategies depending on the type of the module:
-    - For nn.GRU, nn.LSTM, and nn.RNN modules:
-        - The input-hidden weights (weight_ih) are initialized using Xavier uniform initialization.
-        - The hidden-hidden weights (weight_hh) are initialized using orthogonal initialization.
-        - The biases are initialized to zero.
-    - For nn.Linear modules:
-        - The weights are initialized uniformly in the range [-0.01, 0.01].
-        - The biases are initialized to 0.01 if they exist.
-    Args:
-        mat (torch.nn.Module): The model containing the modules to be initialized.
-    """
-
     for m in mat.modules():
         if type(m) in [nn.GRU, nn.LSTM, nn.RNN]:
             for name, param in m.named_parameters():
                 if "weight_ih" in name:
                     for idx in range(4):
                         mul = param.shape[0] // 4
-                        nn.init.xavier_uniform_(param[idx * mul : (idx + 1) * mul])
+                        torch.nn.init.xavier_uniform_(
+                            param[idx * mul : (idx + 1) * mul]
+                        )
                 elif "weight_hh" in name:
                     for idx in range(4):
                         mul = param.shape[0] // 4
-                        nn.init.orthogonal_(param[idx * mul : (idx + 1) * mul])
+                        torch.nn.init.orthogonal_(param[idx * mul : (idx + 1) * mul])
                 elif "bias" in name:
                     param.data.fill_(0)
         else:
             if type(m) in [nn.Linear]:
-                nn.init.uniform_(m.weight, -0.01, 0.01)
+                torch.nn.init.uniform_(m.weight, -0.01, 0.01)
                 if m.bias != None:
                     m.bias.data.fill_(0.01)
 
 
 def train_loop(data, optimizer, criterion_slots, criterion_intents, model, clip=5):
     """
-    Trains the model for one epoch using the provided data, optimizer, and loss functions.
-    Args:
-        data (list): A list of samples, where each sample is a dictionary containing
-                     "utterances", "slots_len", "intents", and "y_slots".
-        optimizer (torch.optim.Optimizer): The optimizer used to update the model's weights.
-        criterion_slots (torch.nn.Module): The loss function for slot predictions.
-        criterion_intents (torch.nn.Module): The loss function for intent predictions.
-        model (torch.nn.Module): The model to be trained.
-        clip (float, optional): The maximum allowed value of the gradients. Defaults to 5.
-    Returns:
-        list: A list of loss values for each sample in the data.
-    """
+    Basic training loop
 
+    Args:
+        data: Dataloader
+        optimizer: torch.optim.SGD or NTAvSGD
+        criterion: torch.nn.CrossEntropyLoss
+        model: torch.nn.Module
+        clip: float, gradient clipping value
+    """
     model.train()
     loss_array = []
     for sample in data:
@@ -77,7 +60,7 @@ def train_loop(data, optimizer, criterion_slots, criterion_intents, model, clip=
         loss = loss_intent + loss_slot  # In joint training we sum the losses.
         # Is there another way to do that?
         loss_array.append(loss.item())
-        loss.backward()
+        loss.backward()  # Compute the gradient, deleting the computational graph
         # clip the gradient to avoid exploding gradients
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
         optimizer.step()  # Update the weights
@@ -86,19 +69,16 @@ def train_loop(data, optimizer, criterion_slots, criterion_intents, model, clip=
 
 def eval_loop(data, criterion_slots, criterion_intents, model, lang):
     """
-    Evaluates the performance of a model on a given dataset.
+    Basic evaluation loop
+
     Args:
-        data (iterable): The dataset to evaluate, where each sample is a dictionary containing
-                         "utterances", "slots_len", "intents", "y_slots", and "utterance".
-        criterion_slots (callable): The loss function for slot predictions.
-        criterion_intents (callable): The loss function for intent predictions.
-        model (torch.nn.Module): The model to evaluate.
-        lang (object): An object containing mappings from IDs to intents, slots, and words.
+        data: Dataloader
+        eval_criterion: torch.nn.CrossEntropyLoss
+        model: torch.nn.Module
+
     Returns:
-        tuple: A tuple containing:
-            - results (dict): The evaluation results for slot predictions.
-            - report_intent (dict): The classification report for intent predictions.
-            - loss_array (list): A list of loss values for each sample in the dataset.
+        perplexity: float, calculated as exp(sum(loss) / sum(number_of_tokens))
+        loss: float, average loss per token
     """
 
     model.eval()
@@ -117,6 +97,7 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
             loss_slot = criterion_slots(slots, sample["y_slots"])
             loss = loss_intent + loss_slot
             loss_array.append(loss.item())
+
             # Intent inference
             # Get the highest probable class
             out_intents = [
@@ -146,7 +127,7 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
         results = evaluate(ref_slots, hyp_slots)
     except Exception as ex:
         # Sometimes the model predicts a class that is not in REF
-        logging.warning("AAAAAAAAAAAAAAA \t\t\t Warning : %s", ex)
+        logging.warning("Warning:", ex)
         ref_s = set([x[1] for x in ref_slots])
         hyp_s = set([x[1] for x in hyp_slots])
         logging.warning(hyp_s.difference(ref_s))
@@ -158,157 +139,158 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
     return results, report_intent, loss_array
 
 
-def pad_list_of_lists(lists, pad_value=np.nan):
-    """
-    Pads each list in a list of lists to the length of the longest list with a specified pad value.
-    Parameters:
-    lists (list of lists): A list containing sublists of varying lengths.
-    pad_value (optional): The value to pad the sublists with. Default is np.nan.
-    Returns:
-    list of lists: A list where each sublist is padded to the length of the longest sublist with the pad_value.
-    """
-
-    max_length = max(len(lst) for lst in lists)
-    return [lst + [pad_value] * (max_length - len(lst)) for lst in lists]
-
-
-def train(
-    model_config: dict,
-    optimizer_config: dict,
-    train_config: dict,
+def run_experiment(
     train_loader: DataLoader,
     dev_loader: DataLoader,
     test_loader: DataLoader,
-    lang,
-    w2id,
-    slot2id,
-    intent2id,
-    writer,
-    PAD_TOKEN,
-    name: str,
-    device: str,
+    lang: Lang,
+    experiment_config: ExperimentConfig,
+    device: torch.device,
+    writer: SummaryWriter,
+    file_name: str = "",
 ):
+    """
+    Run a single experiment with the given configuration.
+    It also creates a TensorBoard writer and logs hyperparams + results.
+
+    Args are self-explanatory and typed.
+    """
 
     out_slot = len(lang.slot2id)
     out_int = len(lang.intent2id)
     vocab_len = len(lang.word2id)
 
-    model_config["out_slot"] = out_slot
-    model_config["out_int"] = out_int
+    model = ModelIAS(
+        experiment_config.hid_size,
+        out_slot,
+        out_int,
+        experiment_config.emb_size,
+        vocab_len,
+        n_layer=experiment_config.n_layer,
+        pad_index=PAD_TOKEN,
+        bidirectional=experiment_config.bidirectional,
+        emb_dropout=experiment_config.emb_dropout,
+        out_dropout=experiment_config.out_dropout,
+    ).to(device)
+    model.apply(init_weights)
 
-    slot_f1s, intent_acc = [], []
-    all_losses_train = []
-    all_losses_dev = []
+    optimizer = torch.optim.Adam(model.parameters(), lr=experiment_config.lr)
+    criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
+    criterion_intents = nn.CrossEntropyLoss()  # Because we do not have the pad token
 
-    for run in tqdm(range(train_config["runs"]), desc="Runs"):
+    patience = experiment_config.patience
+    best_model_state: Optional[dict] = None
+    losses_train = []
+    losses_dev = []
+    sampled_epochs = []
+    best_f1 = -np.inf
 
-        # Get model
-        model = ModelIAS(model_config, vocab_len, name, pad_index=PAD_TOKEN).to(device)
-        model.apply(init_weights)
+    for x in tqdm(range(1, experiment_config.n_epochs)):
+        loss = train_loop(
+            train_loader,
+            optimizer,
+            criterion_slots,
+            criterion_intents,
+            model,
+            clip=experiment_config.clip,
+        )
+        if experiment_config.log_inner:
+            writer.add_scalar("loss/train", np.asarray(loss).mean(), x)
 
-        optimizer = optim.Adam(model.parameters(), lr=optimizer_config["lr"])
-        criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
-        criterion_intents = nn.CrossEntropyLoss()
-
-        run_patience = train_config["patience"]
-
-        best_model = None
-        best_f1 = 0
-
-        losses_train = []
-        losses_dev = []
-        sampled_epochs = []
-
-        for x in tqdm(
-            range(train_config["n_epochs"]), desc=f"Run {run+1}", leave=False
-        ):
-
-            loss = train_loop(
-                train_loader,
-                optimizer,
-                criterion_slots,
-                criterion_intents,
-                model,
-                clip=train_config["clip"],
+        if x % 5 == 0:
+            sampled_epochs.append(x)
+            losses_train.append(np.asarray(loss).mean())
+            results_dev, intent_res, loss_dev = eval_loop(
+                dev_loader, criterion_slots, criterion_intents, model, lang
             )
+            losses_dev.append(np.asarray(loss_dev).mean())
 
-            if x % 5 == 0:  # We check the performance every 5 epochs
-                sampled_epochs.append(x)
-                losses_train.append(np.asarray(loss).mean())
-                results_dev, intent_res, loss_dev = eval_loop(
-                    dev_loader, criterion_slots, criterion_intents, model, lang
-                )
-                losses_dev.append(np.asarray(loss_dev).mean())
+            if experiment_config.log_inner:
+                writer.add_scalar("loss/dev", np.asarray(loss_dev).mean(), x)
+                writer.add_scalar("dev/slot_f1_dev", results_dev["total"]["f"], x)
+                writer.add_scalar("dev/intent_acc_dev", intent_res["accuracy"], x)  # type: ignore
 
-                f1 = results_dev["total"]["f"]
+            f1 = results_dev["total"]["f"]
 
-                if f1 > best_f1:
-                    best_f1 = f1
-                    best_model = copy.deepcopy(model).to("cpu")
+            if f1 > best_f1:
+                best_f1 = f1
+                patience = experiment_config.patience
+                with torch.no_grad():
+                    best_model_state = model.state_dict()
+            else:
+                patience -= 1
+            if patience <= 0:
+                break
 
-                    run_patience = train_config["patience"]
-                else:
-                    run_patience -= 1
-                if run_patience <= 0:  # Early stopping with patience
-                    break
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
 
         results_test, intent_test, _ = eval_loop(
             test_loader, criterion_slots, criterion_intents, model, lang
         )
+        if experiment_config.log_inner:
+            model_path = os.path.join(file_name, "model.pt")
+            torch.save(model.state_dict(), model_path)
 
-        intent_acc.append(intent_test["accuracy"])
-        slot_f1s.append(results_test["total"]["f"])
+    return results_test["total"]["f"], intent_test["accuracy"]  # type: ignore
 
-        all_losses_train.append(losses_train)
-        all_losses_dev.append(losses_dev)
 
-        # exit()
+def experiment_launcher(
+    experiment_config: List[ExperimentConfig], common: Common, device: torch.device
+):
+    """
+    Launch experiments given the list of experiments.
 
-    # Pad lists to the same length
-    all_losses_train = pad_list_of_lists(all_losses_train)
-    all_losses_dev = pad_list_of_lists(all_losses_dev)
+    Args are self-explanatory and typed.
+    """
+    train_loader, dev_loader, test_loader, lang = get_dataloaders_and_lang(
+        common, device=device
+    )
 
-    # Convert to numpy arrays and compute statistics, ignoring nan values
-    all_losses_train = np.array(all_losses_train)
-    all_losses_dev = np.array(all_losses_dev)
+    for experiment in experiment_config:
 
-    avg_losses_train = np.nanmean(all_losses_train, axis=0)
-    std_losses_train = np.nanstd(all_losses_train, axis=0)
-    avg_losses_dev = np.nanmean(all_losses_dev, axis=0)
-    std_losses_dev = np.nanstd(all_losses_dev, axis=0)
+        file_name = os.path.join(
+            "runs",
+            (f"{datetime.now().strftime('%Y%m%d%H%M%S')}-{experiment.name}"),
+        )
+        writer = SummaryWriter(file_name)
+        writer.add_scalar("hparams/hid_size", experiment.hid_size)
+        writer.add_scalar("hparams/emd_size", experiment.emb_size)
+        writer.add_scalar("hparams/n_layer", experiment.n_layer)
+        writer.add_scalar("hparams/lr", experiment.lr)
+        writer.add_scalar("hparams/clip", experiment.clip)
+        writer.add_scalar("hparams/n_epochs", experiment.n_epochs)
+        writer.add_scalar("hparams/patience", experiment.patience)
+        writer.add_scalar("hparams/bidirectional", experiment.bidirectional)
+        writer.add_scalar("hparams/out_dropout", experiment.out_dropout)
+        writer.add_scalar("hparams/emb_dropout", experiment.emb_dropout)
+        writer.add_text("hparams/optim", experiment.optim.__name__)
 
-    slot_f1s = np.array(slot_f1s)
-    intent_acc = np.array(intent_acc)
+        f1, accuracy = [], []
+        for run in range(experiment.n_runs):
+            logging.info(
+                f"Running experiment with config: {str(experiment)} - Run {run + 1}"
+            )
 
-    for epoch, (
-        avg_loss_train,
-        std_loss_train,
-        avg_loss_dev,
-        std_loss_dev,
-    ) in enumerate(
-        zip(avg_losses_train, std_losses_train, avg_losses_dev, std_losses_dev)
-    ):
-        writer.add_scalar("Loss/Train_avg", avg_loss_train, epoch * 5)
-        writer.add_scalar("Loss/Train_std", std_loss_train, epoch * 5)
-        writer.add_scalar("Loss/Dev_avg", avg_loss_dev, epoch * 5)
-        writer.add_scalar("Loss/Dev_std", std_loss_dev, epoch * 5)
+            f1_run, acc_run = run_experiment(
+                train_loader,
+                dev_loader,
+                test_loader,
+                lang,
+                experiment,
+                device,
+                writer,
+                file_name,
+            )
+            f1.append(f1_run)
+            accuracy.append(acc_run)
 
-    writer.add_scalar("Metrics/Slot_F1_avg", slot_f1s.mean())
-    writer.add_scalar("Metrics/Slot_F1_std", slot_f1s.std())
-    writer.add_scalar("Metrics/Intent_Acc_avg", intent_acc.mean())
-    writer.add_scalar("Metrics/Intent_Acc_std", intent_acc.std())
+            experiment.log_inner = False  # Disable inner logging after the first run
 
-    print("Slot F1", round(slot_f1s.mean(), 3), "+-", round(slot_f1s.std(), 3))
-    print("Intent Acc", round(intent_acc.mean(), 3), "+-", round(intent_acc.std(), 3))
+        slot_f1s = np.asarray(f1)
+        intent_accs = np.asarray(accuracy)
 
-    # Saving the model:
-    PATH = f"bin/{best_model.name}.pt"
-    saving_object = {
-        "epoch": x,
-        "model": best_model.state_dict(),
-        "optimizer": optimizer.state_dict(),
-        "w2id": w2id,
-        "slot2id": slot2id,
-        "intent2id": intent2id,
-    }
-    torch.save(saving_object, PATH)
+        writer.add_scalar("results/test_slot_f1_mean", slot_f1s.mean())
+        writer.add_scalar("results/test_slot_f1_std", slot_f1s.std())
+        writer.add_scalar("results/test_intent_acc_mean", intent_accs.mean())
+        writer.add_scalar("results/test_intent_acc_std", intent_accs.std())

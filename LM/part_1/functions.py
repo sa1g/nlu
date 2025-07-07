@@ -1,69 +1,33 @@
-import copy
 import math
+import os
+from datetime import datetime
+from typing import List, Optional
+
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.optim.optimizer import Optimizer, required
 from torch.utils.data import DataLoader
-from functools import partial
-import logging
-
+from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from tqdm import tqdm
+from utils import (Common, ExperimentConfig, Lang, get_dataloaders_and_lang,
+                   logging)
 
-from utils import read_file, Lang, PennTreeBank, collate_fn
-from model import LM_RNN, LM_LSTM
 
-
-def init_weights(mat):
+def train_loop(data, optimizer, criterion, model, clip=5):
     """
-    Initializes the weights of the given neural network modules.
-
-    Parameters:
-    mat (torch.nn.Module): The neural network model containing the modules to initialize.
-    The function initializes weights for the following types of modules:
-    - nn.GRU, nn.LSTM, nn.RNN:
-        - For "weight_ih" parameters, it applies Xavier uniform initialization.
-        - For "weight_hh" parameters, it applies orthogonal initialization.
-        - For "bias" parameters, it sets the values to zero.
-    - nn.Linear:
-        - It applies uniform initialization in the range [-0.01, 0.01] for the weights.
-        - If a bias is present, it sets the bias values to 0.01.
-    """
-    for m in mat.modules():
-        if type(m) in [nn.GRU, nn.LSTM, nn.RNN]:
-            for name, param in m.named_parameters():
-                if "weight_ih" in name:
-                    for idx in range(4):
-                        mul = param.shape[0] // 4
-                        nn.init.xavier_uniform_(param[idx * mul : (idx + 1) * mul])
-                elif "weight_hh" in name:
-                    for idx in range(4):
-                        mul = param.shape[0] // 4
-                        nn.init.orthogonal_(param[idx * mul : (idx + 1) * mul])
-                elif "bias" in name:
-                    param.data.fill_(0)
-        else:
-            if type(m) in [nn.Linear]:
-                nn.init.uniform_(m.weight, -0.01, 0.01)
-                if m.bias != None:
-                    m.bias.data.fill_(0.01)
-
-
-def train_loop(data, optimizer, criterion, model: torch.nn.Module, clip=5):
-    """
-    Trains the model for one epoch.
+    Classic, simple training loop.
 
     Args:
-        data (iterable): An iterable of samples, where each sample is a dictionary
-                         containing 'source', 'target', and 'number_tokens'.
-        optimizer (torch.optim.Optimizer): The optimizer used for training.
-        criterion (callable): The loss function.
-        model (torch.nn.Module): The model to be trained.
-        clip (float, optional): The maximum value to which gradients are clipped. Default is 5.
+        data: Dataloader
+        optimizer: torch.nn.optim.#
+        criterion: torch.nn.CrossEntropyLoss
+        model: torch.nn.Module
+        clip: float, gradient clipping value
+
     Returns:
-        float: The average loss per token over the dataset.
+        Average loss per token
     """
+
     model.train()
     loss_array = []
     number_of_tokens = []
@@ -84,17 +48,18 @@ def train_loop(data, optimizer, criterion, model: torch.nn.Module, clip=5):
 
 def eval_loop(data, eval_criterion, model):
     """
-    Evaluates the model on the given data.
+    Evaluation loop
 
     Args:
-        data (iterable): An iterable of samples, where each sample is a dictionary
-                         containing 'source', 'target', and 'number
-        eval_driterion (callable): The loss function.
-        model (torch.nn.Module): The model to be evaluated.
+        data: Dataloader
+        eval_criterion: torch.nn.CrossEntropyLoss
+        model: torch.nn.Module
 
     Returns:
-        tuple: A tuple containing the perplexity and the average loss per token over the dataset.
+        perplexity: float, calculated as exp(sum(loss) / sum(number_of_tokens))
+        loss: float, average loss per token
     """
+
     model.eval()
     loss_to_return = []
     loss_array = []
@@ -109,319 +74,167 @@ def eval_loop(data, eval_criterion, model):
 
     ppl = math.exp(sum(loss_array) / sum(number_of_tokens))
     loss_to_return = sum(loss_array) / sum(number_of_tokens)
+
     return ppl, loss_to_return
 
 
-def get_loaders_lang(
-    path: str,
-    train_batch_size: int = 128,
-    dev_batch_size: int = 128,
-    test_batch_size: int = 128,
-) -> list[DataLoader | Lang]:
+def init_weights(mat):
     """
-    Get the dataloaders and the language object for the Penn Treebank dataset.
+    Initialize model weights.
 
     Args:
-        path (str): The path to the Penn Treebank dataset.
-        train_batch_size (int, optional): The batch size for the training dataloader. Default is 128.
-        dev_batch_size (int, optional): The batch size for the development dataloader. Default is 128.
-        test_batch_size (int, optional): The batch size for the test dataloader. Default is 128.
-
-    Returns:
-        list[DataLoader | Lang]: A list containing the training, development, and test dataloaders and the language object.
+        mat: torch.nn.Module, model to initialize weights for
     """
-
-    logging.debug("Dataloading init")
-
-    train_raw = read_file(f"{path}/ptb.train.txt")
-    dev_raw = read_file(f"{path}/ptb.valid.txt")
-    test_raw = read_file(f"{path}/ptb.test.txt")
-
-    lang = Lang(train_raw, ["<pad>", "<eos>"])
-
-    train_dataset = PennTreeBank(train_raw, lang)
-    dev_dataset = PennTreeBank(dev_raw, lang)
-    test_dataset = PennTreeBank(test_raw, lang)
-
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=train_batch_size,
-        collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),
-        shuffle=True,
-    )
-
-    dev_loader = DataLoader(
-        dev_dataset,
-        batch_size=dev_batch_size,
-        collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),
-    )
-
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=test_batch_size,
-        collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),
-    )
-
-    logging.debug("Dataloading done")
-    return train_loader, dev_loader, test_loader, lang
+    for m in mat.modules():
+        if type(m) in [nn.GRU, nn.LSTM, nn.RNN]:
+            for name, param in m.named_parameters():
+                if "weight_ih" in name:
+                    for idx in range(4):
+                        mul = param.shape[0] // 4
+                        torch.nn.init.xavier_uniform_(
+                            param[idx * mul : (idx + 1) * mul]
+                        )
+                elif "weight_hh" in name:
+                    for idx in range(4):
+                        mul = param.shape[0] // 4
+                        torch.nn.init.orthogonal_(param[idx * mul : (idx + 1) * mul])
+                elif "bias" in name:
+                    param.data.fill_(0)
+        else:
+            if type(m) in [nn.Linear]:
+                torch.nn.init.uniform_(m.weight, -0.01, 0.01)
+                if m.bias != None:
+                    m.bias.data.fill_(0.01)
 
 
-def get_model(config: dict, device) -> nn.Module:
-    """
-    Get the model based on the configuration.
-
-    Args:
-        config (dict): The configuration dictionary.
-
-    Returns:
-        nn.Module: The model.
-    """
-
-    if config["model_type"] == "LM_RNN":
-        logging.debug("LM_RNN")
-        model = LM_RNN(config).to(device)
-    elif config["model_type"] == "LM_LSTM":
-        logging.debug("LM_LSTM")
-        model = LM_LSTM(config).to(device)
-
-    model.apply(init_weights)
-
-    return model
-
-
-def get_optimizer(model: nn.Module, config: dict = {}):
-    """
-    Get the optimizer based on the configuration.
-
-    Args:
-        model (nn.Module): The model.
-        config (dict, optional): The configuration dictionary. Default is {}.
-
-    Returns:
-        Optimizer: The optimizer.
-    """
-    if config["optim_name"] == "SGD":
-        return optim.SGD(model.parameters(), lr=config["lr"])
-    elif config["optim_name"] == "AdamW":
-        return optim.AdamW(
-            model.parameters(),
-            lr=config["lr"],
-            betas=config["betas"],
-            eps=config["eps"],
-            weight_decay=config["weight_decay"],
-        )
-    elif config["optim_name"] == "NTAvSGD":
-        return NTAvSGD(
-            model.parameters(),
-            lr=config["lr"],
-            momentum=0,
-            dampening=0,
-            weight_decay=config["weight_decay"],
-            nesterov=False,
-        )
-
-    SystemError()
-
-
-def train(
-    model: nn.Module,
-    optimizer_config: dict,
-    lang: Lang,
-    writer,
-    n_epochs,
-    clip: int,
+def run_experiment(
     train_loader: DataLoader,
     dev_loader: DataLoader,
     test_loader: DataLoader,
-    device: str = "cpu",
-    patience: int = 5,
+    lang: Lang,
+    experiment_config: ExperimentConfig,
+    device: torch.device,
 ):
     """
-    Train a neural network model with the given parameters.
+    Run a single experiment with the given configuration.
+    It also creates a TensorBoard writer and logs hyperparams + results.
 
-    Args:
-        model (nn.Module): The neural network model to be trained.
-        optimizer_config (dict): Configuration dictionary for the optimizer.
-        lang (Lang): Language object containing word to index mappings.
-        writer: TensorBoard writer for logging.
-        n_epochs (int): Number of epochs to train the model.
-        clip (int): Gradient clipping value.
-        train_loader (DataLoader): DataLoader for the training dataset.
-        dev_loader (DataLoader): DataLoader for the development/validation dataset.
-        test_loader (DataLoader): DataLoader for the test dataset.
-        device (str, optional): Device to run the training on (default is "cpu").
-        patience (int, optional): Number of epochs to wait for improvement before early stopping (default is 5).
-    Returns:
-        None
+    Args are self-explanatory and typed.
     """
-    criterion_train = torch.nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"])
-    criterion_eval = torch.nn.CrossEntropyLoss(
+
+    file_name = os.path.join(
+        "runs", (f"{datetime.now().strftime('%Y%m%d%H%M%S')}-{experiment_config.name}")
+    )
+    writer = SummaryWriter(log_dir=file_name)
+    writer.add_scalar("hparams/hid_size", experiment_config.hid_size)
+    writer.add_scalar("hparams/emd_size", experiment_config.emb_size)
+    writer.add_scalar("hparams/lr", experiment_config.lr)
+    writer.add_scalar("hparams/clip", experiment_config.clip)
+    writer.add_scalar("hparams/n_epochs", experiment_config.n_epochs)
+    writer.add_scalar("hparams/patience", experiment_config.patience)
+    writer.add_scalar("hparams/dropout_embedding", experiment_config.dropout_embedding)
+    writer.add_scalar("hparams/dropout_output", experiment_config.dropout_output)
+    writer.add_text("hparams/model", experiment_config.model_type.__name__)
+    writer.add_text("hparams/optim", experiment_config.optim.__name__)
+
+    vocal_len = len(lang.word2id)
+
+    model = experiment_config.model_type(
+        emb_size=experiment_config.emb_size,
+        hidden_size=experiment_config.hid_size,
+        output_size=vocal_len,
+        pad_index=lang.word2id["<pad>"],
+        out_dropout=experiment_config.dropout_output,
+        emb_dropout=experiment_config.dropout_embedding,
+        n_layers=1,
+    ).to(device)
+    model.apply(init_weights)
+
+    optimizer = experiment_config.optim(model.parameters(), lr=experiment_config.lr)
+    criterion_train = nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"])
+    criterion_eval = nn.CrossEntropyLoss(
         ignore_index=lang.word2id["<pad>"], reduction="sum"
     )
 
-    optimizer = get_optimizer(model=model, config=optimizer_config)
-
-    logging.debug(f"Got Optimizer: {optimizer.__class__.__name__}")
-
+    patience = experiment_config.patience
     losses_train = []
     losses_dev = []
     sampled_epochs = []
     best_ppl = math.inf
-    best_model = None
+    best_model_state: Optional[dict] = None
 
-    logging.debug("Training")
-    pbar = tqdm(range(1, n_epochs))
+    pbar = tqdm(range(1, experiment_config.n_epochs))
 
-    pat = patience
-
-    # Training loop :)
     for epoch in pbar:
-        loss = train_loop(train_loader, optimizer, criterion_train, model, clip)
+        loss = train_loop(
+            train_loader, optimizer, criterion_train, model, experiment_config.clip
+        )
+
+        writer.add_scalar("loss/train", loss, epoch)
+
         if epoch % 1 == 0:
             sampled_epochs.append(epoch)
-
             losses_train.append(np.asarray(loss).mean())
             ppl_dev, loss_dev = eval_loop(dev_loader, criterion_eval, model)
+            writer.add_scalar("loss/dev", loss_dev, epoch)
+            writer.add_scalar("ppl/dev", ppl_dev, epoch)
             losses_dev.append(np.asarray(loss_dev).mean())
-
             pbar.set_description("PPL: %f" % ppl_dev)
 
-            writer.add_scalar("Loss/Train", losses_train[-1], epoch)
-            writer.add_scalar("Loss/Test", losses_dev[-1], epoch)
-            writer.add_scalar("PPL/Test", ppl_dev, epoch)
-
-            # early stopping deactivated
             if ppl_dev < best_ppl:
                 best_ppl = ppl_dev
-                best_model = copy.deepcopy(model).to("cpu")
-                pat = patience
+                with torch.no_grad():
+                    best_model_state = model.state_dict()
+                patience = 3
             else:
-                pat -= 1
+                patience -= 1
 
-            if pat <= 0:
+            if patience <= 0:  # Early stopping
                 break
 
-    logging.debug("Done")
-
-    best_model.to(device)
-
-    final_ppl, _ = eval_loop(test_loader, criterion_eval, best_model)
-    writer.add_scalar("PPL/Eval", final_ppl, len(sampled_epochs))
-    logging.info("Test ppl: %f", final_ppl)
-
-    path = f"bin/{best_model.name}.pt"
-    torch.save(best_model.state_dict(), path)
-
-
-class NTAvSGD(optim.SGD):
-    """
-    Non-monotonic Average SGD optimizer.
-    """
-
-    def __init__(
-        self, params, lr=1e-3, momentum=0, dampening=0, weight_decay=0, nesterov=False
-    ):
-        super(NTAvSGD, self).__init__(
-            params, lr, momentum, dampening, weight_decay, nesterov
+    if best_model_state is not None:
+        best_model = experiment_config.model_type(
+            emb_size=experiment_config.emb_size,
+            hidden_size=experiment_config.hid_size,
+            output_size=vocal_len,
+            pad_index=lang.word2id["<pad>"],
+            out_dropout=experiment_config.dropout_output,
+            emb_dropout=experiment_config.dropout_embedding,
+            n_layers=1,
         )
-        self.avg_params = None
-        self.is_triggered = False
+        best_model.load_state_dict(best_model_state)
+        best_model.to(device)
 
-    def initialize_avg_params(self):
-        """
-        Initializes the avg_params attribute with the current model parameters.
-        """
-        self.avg_params = []
-        for group in self.param_groups:
-            avg_group = {}
-            for param in group["params"]:
-                if param.requires_grad:
-                    avg_group[param] = torch.clone(param.data).detach()
-            self.avg_params.append(avg_group)
+        final_ppl, _ = eval_loop(test_loader, criterion_eval, best_model)
 
-    def update_avg_params(self):
-        """
-        Update the avg_params attribute with the current model parameters.
-        """
-        for avg_group, group in zip(self.avg_params, self.param_groups):
-            for param in group["params"]:
-                if param.requires_grad:
-                    avg_group[param].data.mul_(0.5).add_(param.data, alpha=0.5)
+        writer.add_scalar("ppl/test", final_ppl)
+        writer.add_scalar("ppl/dev_final", best_ppl)
 
-    def step(self, closure=None):
-        """
-        Standard SGD step with the addition of updating the avg_params attribute.
+        # Save the model
+        model_path = os.path.join(file_name, "model.pt")
+        torch.save(best_model_state, model_path)  # type: ignore
 
-        Args:
-            closure (callable, optional): A closure that reevaluates the model and returns the loss. Default
 
-        Returns:
-            None
-        """
-        loss = None
-        if closure is not None:
-            loss = closure()
+def experiments_launcher(
+    experiment_config: List[ExperimentConfig], common: Common, device: torch.device
+):
+    """
+    Launch experiments given the list of experiments.
 
-        # Standard SGD step
-        super().step()
+    Args are self-explanatory and typed.
+    """
+    train_loader, dev_loader, test_loader, lang = get_dataloaders_and_lang(
+        common, device
+    )
 
-        # Initialize avg_params on first step
-        if self.avg_params is None:
-            self.initialize_avg_params()
+    for experiment in experiment_config:
+        logging.info(f"Running experiment with config: {str(experiment)}")
 
-        # Update avg_params if triggered
-        if self.is_triggered:
-            self.update_avg_params()
-            self.swap_params_with_avg()
-            self.flatten_rnn_parameters()
-
-    def trigger(self, state=True):
-        """
-        Set the is_triggered attribute to the given state.
-        """
-        self.is_triggered = state
-
-    def swap_params_with_avg(self):
-        """
-        Swap the model parameters with the avg_params attribute.
-        """
-        if self.avg_params is not None:
-            for avg_group, group in zip(self.avg_params, self.param_groups):
-                for param in group["params"]:
-                    if param.requires_grad:
-                        param.data, avg_group[param].data = (
-                            avg_group[param].data,
-                            param.data,
-                        )
-
-    def flatten_rnn_parameters(self):
-        """
-        Flatten the parameters of RNN modules.
-        """
-        for group in self.param_groups:
-            for param in group["params"]:
-                if isinstance(param, torch.nn.RNNBase):
-                    param.flatten_parameters()
-
-    def state_dict(self):
-        """
-        Save the state of the optimizer.
-        """
-        state_dict = super(NTAvSGD, self).state_dict()
-        state_dict["avg_params"] = [
-            {k: v.clone() for k, v in avg_group.items()}
-            for avg_group in self.avg_params
-        ]
-        state_dict["is_triggered"] = self.is_triggered
-        return state_dict
-
-    def load_state_dict(self, state_dict):
-        """
-        Load the state of the optimizer.
-        """
-        self.is_triggered = state_dict.pop("is_triggered")
-        avg_params = state_dict.pop("avg_params")
-        self.avg_params = [
-            {k: v.clone() for k, v in avg_group.items()} for avg_group in avg_params
-        ]
-        super(NTAvSGD, self).load_state_dict(state_dict)
+        run_experiment(
+            train_loader,
+            dev_loader,
+            test_loader,
+            lang,
+            experiment,
+            device,
+        )

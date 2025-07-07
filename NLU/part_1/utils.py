@@ -1,18 +1,54 @@
-# Add functions or classes used for data loading and preprocessing
 import json
-import os
-from pprint import pprint
-from collections import Counter
-import torch
-import torch.utils.data as data
-from torch.utils.data import DataLoader
-from sklearn.model_selection import train_test_split
 import logging
+import os
+from collections import Counter
+from dataclasses import dataclass
+from typing import Optional
 
-# Global variables
-device = "cuda:0"
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+import torch
+from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, Dataset
+
 PAD_TOKEN = 0
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger()
+
+
+@dataclass(frozen=True)
+class Common:
+    """
+    common configuration for the experiments
+    """
+
+    dataset_base_path: str = "../dataset/ATIS/"
+    train_batch_size: int = 128
+    eval_batch_size: int = 64
+    test_batch_size: int = 64
+
+
+@dataclass
+class ExperimentConfig:
+    """
+    Configuration for experiments
+    """
+
+    name: str = "Baseline"
+    hid_size: int = 200
+    emb_size: int = 300
+    n_layer: int = 1
+    lr: float = 0.0001
+    clip: int = 5
+    n_epochs: int = 200
+    n_runs: int = 5
+    patience: int = 3
+    log_inner: bool = True
+    bidirectional: bool = False
+    emb_dropout: float = 0.0
+    out_dropout: float = 0.0
+
+    optim: type[torch.optim.Adam] = torch.optim.Adam
 
 
 def load_data(path):
@@ -35,13 +71,13 @@ class Lang:
         self.id2slot = {v: k for k, v in self.slot2id.items()}
         self.id2intent = {v: k for k, v in self.intent2id.items()}
 
-    def w2id(self, elements, cutoff=None, unk=True):
+    def w2id(self, elements, cutoff: Optional[int] = None, unk=True):
         vocab = {"pad": PAD_TOKEN}
         if unk:
             vocab["unk"] = len(vocab)
         count = Counter(elements)
         for k, v in count.items():
-            if v > cutoff:
+            if cutoff != None and v > cutoff:
                 vocab[k] = len(vocab)
         return vocab
 
@@ -54,7 +90,7 @@ class Lang:
         return vocab
 
 
-class IntentsAndSlots(data.Dataset):
+class IntentsAndSlots(Dataset):
     def __init__(self, dataset, lang, unk="unk"):
         self.utterances = []
         self.intents = []
@@ -83,8 +119,7 @@ class IntentsAndSlots(data.Dataset):
     def mapping_lab(self, data, mapper):
         return [mapper[x] if x in mapper else mapper[self.unk] for x in data]
 
-    def mapping_seq(self, data, mapper):
-        # Map sequences to number
+    def mapping_seq(self, data, mapper):  # Map sequences to number
         res = []
         for seq in data:
             tmp_seq = []
@@ -97,7 +132,7 @@ class IntentsAndSlots(data.Dataset):
         return res
 
 
-def collate_fn(data):
+def collate_fn(data, device: torch.device):
     def merge(sequences):
         """
         merge from batch * sent_len to batch * max_len
@@ -112,8 +147,9 @@ def collate_fn(data):
             end = lengths[i]
             padded_seqs[i, :end] = seq  # We copy each sequence into the matrix
         # print(padded_seqs)
-        # We remove these tensors from the computational graph
-        padded_seqs = padded_seqs.detach()
+        padded_seqs = (
+            padded_seqs.detach()
+        )  # We remove these tensors from the computational graph
         return padded_seqs, lengths
 
     # Sort data by seq lengths
@@ -139,26 +175,33 @@ def collate_fn(data):
     return new_item
 
 
-def split_dev_set(tmp_train_raw, test_raw):
+def get_dataloaders_and_lang(
+    config: Common,
+    device: torch.device,
+) -> tuple[DataLoader, DataLoader, DataLoader, Lang]:
     """
-    Splits the training data into training and development sets while ensuring stratification based on intents.
+    Given the common config and device, get the dataloaders for
+    train, dev, test and the language class.
+
     Args:
-        tmp_train_raw (list): A list of dictionaries representing the raw training data. Each dictionary should have an "intent" key.
-        test_raw (list): A list of dictionaries representing the raw test data. Each dictionary should have an "intent" key.
+        common (Common): Common configuration for the project
+        device (torch.device): Device to use for tensors
     Returns:
-        tuple: A tuple containing three elements:
-            - train_raw (list): The training set after splitting.
-            - dev_raw (list): The development set after splitting.
-            - test_raw (list): The original test set.
-    Notes:
-        - The function ensures that intents occurring only once are always included in the training set.
-        - The development set is created by stratified random sampling with a portion size of 10%.
-        - The function logs the sizes of the training, development, and test sets.
+        train_loader (DataLoader): DataLoader for the training set
+        dev_loader (DataLoader): DataLoader for the development set
+        test_loader (DataLoader): DataLoader for the test set
+        lang (Lang): Instance of Lang class with word2id and id2word mappings
     """
+    tmp_train_raw = load_data(os.path.join(config.dataset_base_path, "train.json"))
+    test_raw = load_data(os.path.join(config.dataset_base_path, "test.json"))
+
+    logging.debug(f"Train samples: {len(tmp_train_raw)}")
+    logging.debug(f"Test samples: {len(test_raw)}")
+    logging.debug(f"Train samples: {tmp_train_raw[0]}")
 
     portion = 0.10
 
-    intents = [x["intent"] for x in tmp_train_raw]  # We stratify on intents
+    intents = [x["intent"] for x in tmp_train_raw]  # stratify on intents
     count_y = Counter(intents)
 
     labels = []
@@ -173,7 +216,7 @@ def split_dev_set(tmp_train_raw, test_raw):
             mini_train.append(tmp_train_raw[id_y])
 
     # Random Stratify
-    X_train, X_dev, y_train, y_dev = train_test_split(
+    X_train, X_dev, _, _ = train_test_split(
         inputs,
         labels,
         test_size=portion,
@@ -181,7 +224,6 @@ def split_dev_set(tmp_train_raw, test_raw):
         shuffle=True,
         stratify=labels,
     )
-
     X_train.extend(mini_train)
     train_raw = X_train
     dev_raw = X_dev
@@ -189,100 +231,67 @@ def split_dev_set(tmp_train_raw, test_raw):
     y_test = [x["intent"] for x in test_raw]
 
     # Dataset size
-    logging.debug("Train size %i", len(train_raw))
-    logging.debug("DEV size %i", len(dev_raw))
-    logging.debug("TEST size %i", len(test_raw))
-
-    return train_raw, dev_raw, test_raw
-
-
-def get_loaders_lang(dataset_path, train_batch_size, dev_batch_size, test_batch_size):
-    """
-    Loads and processes the dataset, creating data loaders for training, development, and testing.
-    Args:
-        dataset_path (str): Path to the dataset directory containing 'train.json' and 'test.json'.
-        train_batch_size (int): Batch size for the training data loader.
-        dev_batch_size (int): Batch size for the development data loader.
-        test_batch_size (int): Batch size for the testing data loader.
-    Returns:
-        tuple: A tuple containing:
-            - train_loader (DataLoader): DataLoader for the training dataset.
-            - dev_loader (DataLoader): DataLoader for the development dataset.
-            - test_loader (DataLoader): DataLoader for the testing dataset.
-            - lang (Lang): Language object containing vocabulary, intents, and slots.
-            - w2id (dict): Dictionary mapping words to their corresponding IDs.
-            - slot2id (dict): Dictionary mapping slot labels to their corresponding IDs.
-            - intent2id (dict): Dictionary mapping intent labels to their corresponding IDs.
-    """
-
-    tmp_train_raw = load_data(os.path.join(dataset_path, "train.json"))
-    test_raw = load_data(os.path.join(dataset_path, "test.json"))
-
-    logging.debug("Train samples: %s", len(tmp_train_raw))
-    logging.debug("Test samples: %s", len(test_raw))
-
-    train_raw, dev_raw, test_raw = split_dev_set(tmp_train_raw, test_raw)
-
-    w2id = {"pad": PAD_TOKEN, "unk": 1}
-    slot2id = {"pad": PAD_TOKEN}
-    intent2id = {}
-
-    # Map the words only from the train set
-    # Map slot and intent labels of train, dev and test set. 'unk' is not needed.
-    for example in train_raw:
-        for w in example["utterance"].split():
-            if w not in w2id:
-                w2id[w] = len(w2id)
-        for slot in example["slots"].split():
-            if slot not in slot2id:
-                slot2id[slot] = len(slot2id)
-        if example["intent"] not in intent2id:
-            intent2id[example["intent"]] = len(intent2id)
-
-    for example in dev_raw:
-        for slot in example["slots"].split():
-            if slot not in slot2id:
-                slot2id[slot] = len(slot2id)
-        if example["intent"] not in intent2id:
-            intent2id[example["intent"]] = len(intent2id)
-
-    for example in test_raw:
-        for slot in example["slots"].split():
-            if slot not in slot2id:
-                slot2id[slot] = len(slot2id)
-        if example["intent"] not in intent2id:
-            intent2id[example["intent"]] = len(intent2id)
-
-    logging.debug(
-        "# Vocabulary size: %i", len(w2id) - 2
-    )  # we remove pad and unk from the count
-    logging.debug("# Slots: %i", len(slot2id) - 1)
-    logging.debug("# Intent: %i", len(intent2id))
+    logging.info(f"TRAIN size: {len(train_raw)}")
+    logging.info(f"DEV size: {len(dev_raw)}")
+    logging.info(f"TEST size: {len(test_raw)}")
 
     words = sum(
         [x["utterance"].split() for x in train_raw], []
     )  # No set() since we want to compute the cutoff
-    corpus = train_raw + dev_raw + test_raw  # We do not wat unk labels,
-    # however this depends on the research purpose
+    corpus = train_raw + dev_raw + test_raw
+
     slots = set(sum([line["slots"].split() for line in corpus], []))
     intents = set([line["intent"] for line in corpus])
 
-    lang = Lang(words, intents, slots, cutoff=0)
+    lang = Lang(words=words, intents=intents, slots=slots, cutoff=0)
 
     # Create our datasets
     train_dataset = IntentsAndSlots(train_raw, lang)
     dev_dataset = IntentsAndSlots(dev_raw, lang)
     test_dataset = IntentsAndSlots(test_raw, lang)
 
-    # Dataloader instantiations
     train_loader = DataLoader(
-        train_dataset, batch_size=train_batch_size, collate_fn=collate_fn, shuffle=True
+        train_dataset,
+        batch_size=config.train_batch_size,
+        collate_fn=lambda x: collate_fn(x, device=device),
+        shuffle=True,
     )
     dev_loader = DataLoader(
-        dev_dataset, batch_size=dev_batch_size, collate_fn=collate_fn
+        dev_dataset,
+        batch_size=config.eval_batch_size,
+        collate_fn=lambda x: collate_fn(x, device=device),
     )
     test_loader = DataLoader(
-        test_dataset, batch_size=test_batch_size, collate_fn=collate_fn
+        test_dataset,
+        batch_size=config.test_batch_size,
+        collate_fn=lambda x: collate_fn(x, device=device),
     )
 
-    return train_loader, dev_loader, test_loader, lang, w2id, slot2id, intent2id
+    return train_loader, dev_loader, test_loader, lang
+
+
+class EmojiFormatter(logging.Formatter):
+    def format(self, record):
+        # Add emoji based on log level
+        if record.levelno == logging.INFO:
+            emoji = "🤓\t"
+        elif record.levelno == logging.WARNING:
+            emoji = "⚠️\t"
+        elif record.levelno == logging.DEBUG:
+            emoji = "❗\t"
+        elif record.levelno == logging.ERROR:
+            emoji = "❌\t"
+        elif record.levelno == logging.CRITICAL:
+            emoji = "🚨\t"
+        else:
+            emoji = ""  # Default (no emoji for other levels)
+
+        # Update the format string dynamically
+        self._style._fmt = f"{emoji}%(levelname)s - %(asctime)s - %(message)s"
+        return super().format(record)
+
+
+# Replace the default formatter with our custom one
+formatter = EmojiFormatter(datefmt="%Y-%m-%d %H:%M:%S")  # Optional: Customize timestamp
+for handler in logger.handlers:
+    handler.setFormatter(formatter)

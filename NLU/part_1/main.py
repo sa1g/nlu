@@ -1,116 +1,57 @@
-# This file is used to run your functions and print the results
-# Please write your fuctions or classes in the functions.py
-
-# Import everything from functions.py file
-import json
-from model import ModelIAS
-from utils import get_loaders_lang
-from functions import *
 import os
-from torch.utils.tensorboard import SummaryWriter
-import logging
-import argparse
 
-parser = argparse.ArgumentParser()
-parser.add_argument("-c", default="config.json", help="Config file json")
-logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.DEBUG)
-
-# logging.basicConfig(
-#     format="%(levelname)s:%(filename)s:%(funcName)s:%(lineno)d:%(message)s",
-#     level=logging.DEBUG
-# )
-
-
-def main(
-    train_config: dict, model_config: dict, optimizer_config: dict, device, PAD_TOKEN
-):
-    """
-    Main function to set up data loaders, initialize TensorBoard writer, and start the training process.
-    Args:
-        train_config (dict): Configuration dictionary for training parameters, including dataset path and batch sizes.
-        model_config (dict): Configuration dictionary for model parameters, including embedding size, hidden size, and dropout rates.
-        optimizer_config (dict): Configuration dictionary for optimizer parameters.
-        device: The device (CPU or GPU) to be used for training.
-        PAD_TOKEN: The token used for padding sequences.
-    Returns:
-        None
-    """
-
-    train_loader, dev_loader, test_loader, lang, w2id, slot2id, intent2id = (
-        get_loaders_lang(
-            train_config["dataset_path"],
-            train_config["train_batch_size"],
-            train_config["dev_batch_size"],
-            train_config["test_batch_size"],
-        )
-    )
-
-    # name = f"ModelIAS_emb_{model_config['emb_size']}_hid_{model_config['hid_size']}_edo_{model_config['emb_dropout']}_odo_{model_config['out_dropout']}_ido_{model_config['in_dropout']}_lay_{model_config['n_layers']}_bid_{model_config['bidirectional']}_{train_config['train_batch_size']}_{train_config['dev_batch_size']}_{train_config['test_batch_size']}"
-    name = train_config["name"]
-
-    # TENSORBOARD
-    writer: SummaryWriter = SummaryWriter(log_dir=f"log/{name}")
-
-    # Training
-    train(
-        model_config=model_config,
-        optimizer_config=optimizer_config,
-        train_config=train_config,
-        train_loader=train_loader,
-        dev_loader=dev_loader,
-        test_loader=test_loader,
-        lang=lang,
-        w2id=w2id,
-        slot2id=slot2id,
-        intent2id=intent2id,
-        writer=writer,
-        PAD_TOKEN=PAD_TOKEN,
-        name=name,
-        device=device,
-    )
-
-
-def load_config(config_file):
-    with open(config_file, "r") as file:
-        configs = json.load(file)
-    return configs
-
+import torch
+from functions import experiment_launcher
+from utils import Common, ExperimentConfig
 
 if __name__ == "__main__":
-    device = "cuda:0"
-    # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"  # Used to report errors on CUDA side
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"  # Used to report errors on CUDA side
     PAD_TOKEN = 0
 
-    args = parser.parse_args()
-    config: dict = load_config(args.c)
+    common = Common()
 
-    for key, config in config.items():
-        logging.info(" !! Running %s !!", key)
+    experiment_config = [
+        ExperimentConfig(
+            name="Baseline0001",
+            lr=0.0001,
+        ),
+        ExperimentConfig(
+            name="Baseline001",
+            lr=0.001,
+        ),
+        ExperimentConfig(
+            name="Baseline01",
+            lr=0.01,
+        ),
+        ExperimentConfig(
+            name="DropEmb001",
+            emb_dropout=0.5,
+            lr=0.001,
+        ),
+        ExperimentConfig(
+            name="DropOut001",
+            out_dropout=0.5,
+            lr=0.001,
+        ),
+        ExperimentConfig(
+            name="Drop001",
+            emb_dropout=0.5,
+            out_dropout=0.5,
+            lr=0.001,
+        ),
+        ExperimentConfig(
+            name="Bidirectional001",
+            bidirectional=True,
+            lr=0.001,
+        ),
+        ExperimentConfig(
+            name="BidirectionalDrop001",
+            bidirectional=True,
+            out_dropout=0.5,
+            lr=0.001,
+        ),
+    ]
 
-        train_config = {
-            "name": key,
-            "dataset_path": config.get(
-                "dataset_path", os.path.join("..", "dataset", "ATIS")
-            ),
-            "train_batch_size": config.get("train_batch_size", 128),
-            "dev_batch_size": config.get("dev_batch_size", 128),
-            "test_batch_size": config.get("test_batch_size", 128),
-            "n_epochs": config.get("n_epochs", 1),
-            "clip": config.get("clip", 5),
-            "patience": config.get("patience", 5),
-            "runs": config.get("runs", 5),
-        }
-
-        model_config = {
-            "emb_size": config.get("emb_size", 300),
-            "hid_size": config.get("hid_size", 300),
-            "emb_dropout": config.get("emb_dropout", 0),
-            "out_dropout": config.get("out_dropout", 0),
-            "in_dropout": config.get("in_dropout", 0),
-            "n_layers": config.get("n_layers", 1),
-            "bidirectional": config.get("bidirectional", False),
-        }
-
-        optimizer_config = {"lr": config.get("lr", 0.001)}
-
-        main(train_config, model_config, optimizer_config, device, PAD_TOKEN)
+    experiment_launcher(experiment_config, common, device)

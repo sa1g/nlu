@@ -2,32 +2,279 @@ import json
 import logging
 import os
 from collections import Counter
-from sklearn.model_selection import train_test_split
+from dataclasses import dataclass
+from typing import List
+
 import torch
+from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, Dataset
+from transformers import BertTokenizerFast
+
+PAD_TOKEN = 0
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger()
+
+
+# Here to avoid circular imports
+@dataclass(frozen=True)
+class Common:
+    """
+    common configuration for the experiments
+    """
+
+    dataset_base_path: str = "../dataset/ATIS/"
+    train_batch_size: int = 16
+    eval_batch_size: int = 16
+    test_batch_size: int = 16
+
+
+# Here to avoid circular imports
+@dataclass
+class ExperimentConfig:
+    """
+    Configuration for experiments
+    """
+
+    name: str = "Baseline"
+    n_runs: int = 1
+    n_epochs: int = 30
+    lr: float = 5e-5
+    grad_clip: bool = False
+    scheduler: bool = False
+    log_inner: bool = True
+    patience: int = 5
 
 
 def load_data(path):
+    """
+    input: path/to/data
+    output: json
+    """
     dataset = []
-    with open(path, "r") as file:
-        dataset = json.loads(file.read())
-
+    with open(path) as f:
+        dataset = json.loads(f.read())
     return dataset
 
 
-def split_sets(tmp_train_raw):
+class Lang:
+    def __init__(self, intents, slots):
+        self.tokenizer: BertTokenizerFast = BertTokenizerFast.from_pretrained(
+            "bert-base-uncased"
+        )
+
+        self.pad_token = self.tokenizer.pad_token_id
+
+        self.slot2id = self.lab2id(slots)
+        self.intent2id = self.lab2id(intents, pad=False)
+        self.id2intent = {v: k for k, v in self.intent2id.items()}
+
+        self.id2slot = {v: k for k, v in self.slot2id.items()}
+        self.id2slot[self.pad_token] = "O"  # Ensure pad token is mapped to "O"
+
+    def lab2id(self, elements, pad=True):
+        vocab = {}
+        if pad:
+            vocab["pad"] = self.pad_token
+        for elem in elements:
+            vocab[elem] = len(vocab)
+        return vocab
+
+
+@dataclass
+class Sample:
+    tokenized_utterance: torch.Tensor
+    attention_mask: torch.Tensor
+    slots: torch.Tensor
+    intent: torch.Tensor
+
+
+class IntentsAndSlots(Dataset):
+    def __init__(self, dataset, lang: Lang):
+        self.utterances = []
+        self.intents = []
+        self.slots = []
+        self.unk = "unk"
+        self.tokenizer = lang.tokenizer
+        self.pad_token_id = self.tokenizer.pad_token_id
+        self.sep_token_id = self.tokenizer.sep_token_id
+        self.cls_token_id = self.tokenizer.cls_token_id
+
+        for x in dataset:
+            self.utterances.append(x["utterance"])
+            self.slots.append(x["slots"])
+            self.intents.append(x["intent"])
+
+        self.slot_ids = self.mapping_seq(self.slots, lang.slot2id)
+        self.intent_ids = self.mapping_lab(self.intents, lang.intent2id)
+
+        self.processed_samples = [
+            self.preprocess(self.utterances[i], self.slot_ids[i], self.intent_ids[i], i)
+            for i in range(len(self.utterances))
+        ]
+
+    def preprocess(self, phrase, slot_ids, intent_ids, i):
+        """
+        Set subtoken ids to pad, except for the first one.
+        """
+
+        tokenized_sentence = []
+        attention_mask = []
+        slots = []
+
+        for word, label in zip(phrase.split(), slot_ids):
+            tokenized = self.tokenizer(word, add_special_tokens=False)
+
+            utt = tokenized["input_ids"]  # type: ignore
+            att_mask = tokenized["attention_mask"]  # type: ignore
+            word_ids = tokenized.word_ids()
+
+            tokenized_sentence.extend(utt)  # type: ignore
+            attention_mask.extend(att_mask)  # type: ignore
+
+            # If all word_ids are the same, it means the word is a single token
+            # so we have to <pad> the slot_ids which are not the first one
+            # if len(set(word_ids)) == 1:
+            #     slots.extend([label])
+            #     slots.extend([self.pad_token_id] * (len(utt) - 1))  # type: ignore
+            # else:
+            #     # otherwise, we can copy the slot_id for all the tokens of the "word"
+            #     slots.extend([label] * len(utt))  # type: ignore
+
+            if len(word_ids) > 1:
+                slots.extend([label])
+                slots.extend([self.pad_token_id] * (len(utt) - 1))  # type: ignore
+            else:
+                slots.extend([label])
+
+        tokenized_sentence = torch.tensor(tokenized_sentence)
+        attention_mask = torch.tensor(attention_mask)
+        slots = torch.tensor(slots)
+        intent_ids = torch.tensor(intent_ids)
+
+        return Sample(
+            tokenized_utterance=tokenized_sentence,
+            attention_mask=attention_mask,
+            slots=slots,
+            intent=intent_ids,
+        )
+
+    def __len__(self):
+        return len(self.processed_samples)
+
+    def __getitem__(self, idx) -> Sample:
+        return self.processed_samples[idx]
+
+    # Auxiliary methods
+    def mapping_lab(self, data, mapper):
+        return [mapper[x] if x in mapper else mapper[self.unk] for x in data]
+
+    def mapping_seq(self, data, mapper):  # Map sequences to number
+        res = []
+        for seq in data:
+            tmp_seq = []
+            for x in seq.split():
+                if x in mapper:
+                    tmp_seq.append(mapper[x])
+                else:
+                    tmp_seq.append(mapper[self.unk])
+            res.append(tmp_seq)
+        return res
+
+
+@dataclass
+class Batch:
+    utterances: torch.Tensor
+    attention_masks: torch.Tensor
+    y_slots: torch.Tensor
+    slots_len: torch.Tensor
+    intents: torch.Tensor
+
+
+def collate_fn(batch: List[Sample], device: torch.device):
+    def merge(sequences):
+        """
+        merge from batch * sent_len to batch * max_len
+        """
+        lengths = [len(seq) for seq in sequences]
+        max_len = 1 if max(lengths) == 0 else max(lengths)
+
+        padded_seqs = torch.LongTensor(len(sequences), max_len).fill_(PAD_TOKEN)
+        for i, seq in enumerate(sequences):
+            end = lengths[i]
+            padded_seqs[i, :end] = seq
+        padded_seqs = padded_seqs.detach()
+
+        return padded_seqs, lengths
+
+    # Sort batch by sequence lengths (descending order)
+    batch.sort(key=lambda x: len(x.tokenized_utterance), reverse=True)
+
+    # Create dictionary to hold batched data
+    new_item = {}
+
+    # Get all fields from the Sample dataclass
+    fields = Sample.__dataclass_fields__.keys()
+
+    # Process each field
+    for field in fields:
+        if field == "tokenized_utterance":
+            src_utt, _ = merge([sample.tokenized_utterance for sample in batch])
+            new_item["utterances"] = src_utt.to(device)
+        elif field == "attention_mask":
+            # For attention mask, we need to pad with 0s (not attending to padding)
+            masks = [sample.attention_mask for sample in batch]
+            lengths = [len(mask) for mask in masks]
+            max_len = max(lengths) if max(lengths) > 0 else 1
+            padded_masks = torch.LongTensor(len(batch), max_len).fill_(0)
+            for i, mask in enumerate(masks):
+                end = lengths[i]
+                padded_masks[i, :end] = mask
+            new_item["attention_masks"] = padded_masks.to(device)
+        elif field == "slots":
+            y_slots, y_lengths = merge([sample.slots for sample in batch])
+            new_item["y_slots"] = y_slots.to(device)
+            new_item["slots_len"] = torch.LongTensor(y_lengths).to(device)
+        elif field == "intent":
+            intent = torch.LongTensor([sample.intent for sample in batch])
+            new_item["intents"] = intent.to(device)
+
+    return Batch(
+        utterances=new_item["utterances"],
+        attention_masks=new_item["attention_masks"],
+        y_slots=new_item["y_slots"],
+        slots_len=new_item["slots_len"],
+        intents=new_item["intents"],
+    )
+
+
+def get_dataloaders_and_lang(
+    config: Common,
+    device: torch.device,
+) -> tuple[DataLoader, DataLoader, DataLoader, Lang]:
     """
-    Splits the input dataset into training and development sets, ensuring stratification based on intents.
+    Given the common config and device, get the dataloaders for
+    train, dev, test and the language class.
+
     Args:
-        tmp_train_raw (list of dict): The raw training data, where each element is a dictionary containing an "intent" key.
+        common (Common): Common configuration for the project
+        device (torch.device): Device to use for tensors
     Returns:
-        tuple: A tuple containing two lists:
-            - train_raw (list of dict): The training set after stratification.
-            - dev_raw (list of dict): The development set after stratification.
+        train_loader (DataLoader): DataLoader for the training set
+        dev_loader (DataLoader): DataLoader for the development set
+        test_loader (DataLoader): DataLoader for the test set
+        lang (Lang): Instance of Lang class with word2id and id2word mappings
     """
+    tmp_train_raw = load_data(os.path.join(config.dataset_base_path, "train.json"))
+    test_raw = load_data(os.path.join(config.dataset_base_path, "test.json"))
+
+    logging.debug(f"Train samples: {len(tmp_train_raw)}")
+    logging.debug(f"Test samples: {len(test_raw)}")
+    logging.debug(f"Train samples: {tmp_train_raw[0]}")
 
     portion = 0.10
 
-    # We stratify on intents
     intents = [x["intent"] for x in tmp_train_raw]
     count_y = Counter(intents)
 
@@ -35,9 +282,8 @@ def split_sets(tmp_train_raw):
     inputs = []
     mini_train = []
 
-    # If some intents occurs only once, we put them in training
     for id_y, y in enumerate(intents):
-        if count_y[y] > 1:
+        if count_y[y] > 1:  # If some intents occurs only once, we put them in training
             inputs.append(tmp_train_raw[id_y])
             labels.append(y)
         else:
@@ -56,320 +302,66 @@ def split_sets(tmp_train_raw):
     train_raw = X_train
     dev_raw = X_dev
 
-    return train_raw, dev_raw
+    # Dataset size
+    logging.info(f"TRAIN size: {len(train_raw)}")
+    logging.info(f"DEV size: {len(dev_raw)}")
+    logging.info(f"TEST size: {len(test_raw)}")
+
+    corpus = train_raw + dev_raw + test_raw
+    slots = set(sum([line["slots"].split() for line in corpus], []))
+    intents = set([line["intent"] for line in corpus])
+
+    lang = Lang(intents=intents, slots=slots)
+
+    # Create our datasets
+    train_dataset = IntentsAndSlots(train_raw, lang)
+    dev_dataset = IntentsAndSlots(dev_raw, lang)
+    test_dataset = IntentsAndSlots(test_raw, lang)
+
+    # Dataloader instantiations
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config.train_batch_size,
+        collate_fn=lambda x: collate_fn(x, device=device),
+        shuffle=True,
+    )
+    dev_loader = DataLoader(
+        dev_dataset,
+        batch_size=config.eval_batch_size,
+        collate_fn=lambda x: collate_fn(x, device=device),
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=config.test_batch_size,
+        collate_fn=lambda x: collate_fn(x, device=device),
+    )
+
+    return train_loader, dev_loader, test_loader, lang
 
 
-def get_data_and_mapping(
-    train=os.path.join("../dataset", "ATIS", "train.json"),
-    test=os.path.join("../dataset", "ATIS", "test.json"),
-):
-    """
-    Load and process training and testing data, and generate mappings for slots and intents.
-    Args:
-        train (str): Path to the training data file. Defaults to "../dataset/ATIS/train.json".
-        test (str): Path to the testing data file. Defaults to "../dataset/ATIS/test.json".
-    Returns:
-        tuple: A tuple containing:
-            - train_raw (list): List of training data samples.
-            - dev_raw (list): List of development data samples.
-            - test_raw (list): List of testing data samples.
-            - slots2id (dict): Dictionary mapping slot names to their corresponding IDs.
-            - id2slots (dict): Dictionary mapping slot IDs to their corresponding names.
-            - intent2id (dict): Dictionary mapping intent names to their corresponding IDs.
-            - id2intent (dict): Dictionary mapping intent IDs to their corresponding names.
-    """
+# Here to avoid circular imports
+class EmojiFormatter(logging.Formatter):
+    def format(self, record):
+        # Add emoji based on log level
+        if record.levelno == logging.INFO:
+            emoji = "🤓\t"
+        elif record.levelno == logging.WARNING:
+            emoji = "⚠️\t"
+        elif record.levelno == logging.DEBUG:
+            emoji = "❗\t"
+        elif record.levelno == logging.ERROR:
+            emoji = "❌\t"
+        elif record.levelno == logging.CRITICAL:
+            emoji = "🚨\t"
+        else:
+            emoji = ""  # Default (no emoji for other levels)
 
-    tmp_train_raw = load_data(train)
-    test_raw = load_data(test)
-
-    train_raw, dev_raw = split_sets(tmp_train_raw)
-
-    logging.info("Train size: %d", len(train_raw))
-    logging.info("Dev size: %d", len(dev_raw))
-    logging.info("Test size: %d", len(test_raw))
-
-    slots_set = set()
-    intents_set = set()
-
-    for phrases in [train_raw, dev_raw, test_raw]:
-        for phrase in phrases:
-            for slot in phrase["slots"].split():
-                slots_set.add(slot)
-            intents_set.add(phrase["intent"])
-
-    slots2id = {"pad": 0}
-    id2slots = {0: "O"}
-    for slot in slots_set:
-        slots2id[slot] = len(slots2id)
-        id2slots[len(id2slots)] = slot
-
-    intent2id = {}
-    id2intent = {}
-    for intent in intents_set:
-        intent2id[intent] = len(intent2id)
-        id2intent[len(id2intent)] = intent
-
-    return train_raw, dev_raw, test_raw, slots2id, id2slots, intent2id, id2intent
+        # Update the format string dynamically
+        self._style._fmt = f"{emoji}%(levelname)s - %(asctime)s - %(message)s"
+        return super().format(record)
 
 
-def tokenize_and_preserve_labels(sentence, text_labels, tokenizer):
-    """
-    Tokenizes a sentence while preserving the labels for each token.
-    Args:
-        sentence (str): The sentence to be tokenized.
-        text_labels (str): A string of labels corresponding to each word in the sentence, separated by spaces.
-        tokenizer (Tokenizer): The tokenizer to be used for tokenizing the sentence.
-    Returns:
-        tuple: A tuple containing:
-            - tokenized_sentence (list of str): The tokenized sentence.
-            - labels (list of str): The labels for each token, with padding ("pad") for subwords.
-    """
-
-    text_labels = text_labels.split()
-    tokenized_sentence = []
-    labels = []
-
-    for word, label in zip(sentence.split(), text_labels):
-        tokenized_word = tokenizer.tokenize(word)
-        # n_subwords = len(tokenized_word)
-
-        # tokenized_sentence.extend(tokenized_word)
-
-        # labels.extend([label] * n_subwords)
-
-        # Add the tokenized word to the tokenized sentence
-        tokenized_sentence.extend(tokenized_word)
-
-        # Assign the original label to the first subtoken and padding (-100) to the rest
-        labels.extend([label])
-        labels.extend(["pad"] * (len(tokenized_word) - 1))
-
-    return tokenized_sentence, labels
-
-
-def tokenize_data(raw_data, tokenizer):
-    """
-    Tokenizes the given raw data using the provided tokenizer.
-    Args:
-        raw_data (list of dict): A list of dictionaries where each dictionary contains
-            the keys "intent", "slots", and "utterance".
-        tokenizer (Tokenizer): A tokenizer object that will be used to tokenize the utterances.
-    Returns:
-        list of dict: A list of dictionaries where each dictionary contains the original
-            "intent", "slots", and "utterance" along with the tokenized "tokenized_utterance"
-            and "tokenized_slots".
-    """
-
-    processed_data = []
-    for dset in raw_data:
-        tokenized_set = {}
-        tokenized_set["raw_intent"] = dset["intent"]
-        tokenized_set["raw_slots"] = dset["slots"]
-        tokenized_set["raw_utterance"] = dset["utterance"]
-
-        tokenized_sentence, adapted_labels = tokenize_and_preserve_labels(
-            dset["utterance"], dset["slots"], tokenizer
-        )
-
-        tokenized_set["tokenized_utterance"] = tokenized_sentence
-        tokenized_set["tokenized_slots"] = adapted_labels
-
-        processed_data.append(tokenized_set)
-    return processed_data
-
-
-def encode_data(tokenized_data, tokenizer, slots2id, intent2id):
-    """
-    Encodes tokenized data for natural language understanding tasks.
-    Args:
-        tokenized_data (list of dict): A list of dictionaries containing tokenized data.
-            Each dictionary should have the following keys:
-            - "raw_intent": The raw intent of the utterance.
-            - "raw_slots": The raw slots of the utterance.
-            - "raw_utterance": The raw text of the utterance.
-            - "tokenized_utterance": The tokenized version of the utterance.
-            - "tokenized_slots": The tokenized version of the slots.
-        tokenizer (Tokenizer): A tokenizer object with an `encode_plus` method for encoding utterances.
-        slots2id (dict): A dictionary mapping slot labels to their corresponding IDs.
-        intent2id (dict): A dictionary mapping intent labels to their corresponding IDs.
-    Returns:
-        list of dict: A list of dictionaries containing the encoded data. Each dictionary contains:
-            - "raw_intent": The raw intent of the utterance.
-            - "raw_slots": The raw slots of the utterance.
-            - "raw_utterance": The raw text of the utterance.
-            - "tokenized_utterance": The tokenized version of the utterance.
-            - "tokenized_slots": The tokenized version of the slots.
-            - "encoded_utterance": The encoded version of the tokenized utterance.
-            - "encoded_slots": The encoded version of the tokenized slots.
-            - "encoded_intent": The encoded version of the raw intent.
-    """
-
-    encoded_data = []
-    for dset in tokenized_data:
-        encoded_set = {}
-
-        encoded_set["raw_intent"] = dset["raw_intent"]
-        encoded_set["raw_slots"] = dset["raw_slots"]
-        encoded_set["raw_utterance"] = dset["raw_utterance"]
-        encoded_set["tokenized_utterance"] = dset["tokenized_utterance"]
-        encoded_set["tokenized_slots"] = dset["tokenized_slots"]
-
-        # Encode the tokenized utterance
-        encoded_set["encoded_utterance"] = tokenizer.encode_plus(
-            dset["tokenized_utterance"], add_special_tokens=False
-        )
-
-        # Encode the tokenized slots
-        # encoded_set["encoded_slots"] = [
-        # slots2id[slot] if slot != -100 else -100 for slot in dset["tokenized_slots"]
-        # ]
-
-        encoded_set["encoded_slots"] = [
-            slots2id[slot] for slot in dset["tokenized_slots"]
-        ]
-
-        # Encode the intent
-        encoded_set["encoded_intent"] = intent2id[dset["raw_intent"]]
-
-        encoded_data.append(encoded_set)
-    return encoded_data
-
-
-def check_preprocessing(encoded_data):
-    """
-    Checks the preprocessing of encoded data for consistency.
-    This function iterates through a list of tokenized data and verifies that the length of
-    the 'input_ids' in 'encoded_utterance' matches the length of 'encoded_slots'. If there
-    are discrepancies, it logs detailed debug information for each problematic entry and
-    raises a ValueError if any errors are found.
-    Args:
-        encoded_data (list): A list of dictionaries, where each dictionary contains the
-                             following keys:
-                             - "encoded_utterance": A dictionary with an "input_ids" key.
-                             - "encoded_slots": A list of encoded slots.
-                             - "tokenized_utterance": The original tokenized utterance.
-                             - "tokenized_slots": The original tokenized slots.
-                             - "encoded_intent": The encoded intent.
-    Raises:
-        ValueError: If there are any discrepancies between the lengths of 'input_ids' and
-                    'encoded_slots'.
-    """
-
-    err = 0
-    for tokenized_data in encoded_data:
-        if (
-            len(tokenized_data["encoded_utterance"]["input_ids"])
-            - len(tokenized_data["encoded_slots"])
-        ) != 0:
-            err += 1
-
-            logging.debug(tokenized_data["tokenized_utterance"])
-            logging.debug(tokenized_data["tokenized_slots"])
-            logging.debug(tokenized_data["encoded_utterance"])
-            logging.debug(tokenized_data["encoded_slots"])
-            logging.debug(tokenized_data["encoded_intent"])
-
-            logging.debug("\n\n")
-
-    if err != 0:
-        logging.error("There are %d errors in the preprocessing", err)
-        raise ValueError("There are errors in the preprocessing")
-
-
-def preprocess_data(raw_data, tokenizer, slots2id, intent2id):
-    """
-    Preprocess the raw data by tokenizing and encoding it.
-
-    Args:
-    - raw_data: list of dictionaries
-    - tokenizer: BertTokenizer
-    - slots2id: dictionary mapping slots to numerical ids
-    - intent2id: dictionary mapping intents to numerical ids
-
-    Note: the correctness of slots2id and intent2id is assumed.
-
-    Each element in processed_train is a dictionary with the following keys:
-    - raw_intent
-    - raw_slots
-    - raw_utterance
-    - tokenized_utterance
-    - tokenized_slots
-    - encoded_utterance
-    - encoded_slots
-    - encoded_intent
-    """
-
-    # Tokenize `utterance` and `slots` with sub-token labelling. The subtoken is labelled with the same label
-    processed_data = tokenize_data(raw_data, tokenizer)
-
-    # Encode the tokenized data
-    encoded_data = encode_data(processed_data, tokenizer, slots2id, intent2id)
-
-    # Check if the preprocessing is correct
-    check_preprocessing(encoded_data)
-
-    return encoded_data
-
-
-class ATISDataset(torch.utils.data.Dataset):
-    def __init__(self, processed_data):
-        self.input = [data["encoded_utterance"]["input_ids"] for data in processed_data]
-        self.attention_mask = [
-            data["encoded_utterance"]["attention_mask"] for data in processed_data
-        ]
-        self.token_type_ids = [
-            data["encoded_utterance"]["token_type_ids"] for data in processed_data
-        ]
-        self.slots = [data["encoded_slots"] for data in processed_data]
-        self.intent = [data["encoded_intent"] for data in processed_data]
-
-    def __len__(self):
-        return len(self.input)
-
-    def __getitem__(self, idx):
-        return (
-            self.input[idx],
-            self.attention_mask[idx],
-            self.token_type_ids[idx],
-            self.slots[idx],
-            self.intent[idx],
-        )
-
-
-def get_device():
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-def collate_fn(data):
-    device = get_device()
-
-    # Get the max length of the input sequence
-    max_len = max([len(sentence) for sentence, _, _, _, _ in data])
-
-    # PAD all the input sequences to the max length
-    slots_len = torch.tensor([len(slots) for _, _, _, slots, _ in data]).to(device)
-    input_ids = torch.tensor(
-        [sentence + [0] * (max_len - len(sentence)) for sentence, _, _, _, _ in data]
-    ).to(device)
-    attention_mask = torch.tensor(
-        [[1] * len(mask) + [0] * (max_len - len(mask)) for _, mask, _, _, _ in data]
-    ).to(device)
-    token_type_ids = torch.tensor(
-        [
-            token_type_ids + [0] * (max_len - len(token_type_ids))
-            for _, _, token_type_ids, _, _ in data
-        ]
-    ).to(device)
-    slots = torch.tensor(
-        [slots + [0] * (max_len - len(slots)) for _, _, _, slots, _ in data]
-    ).to(device)
-    intent = torch.tensor([intent for _, _, _, _, intent in data]).to(device)
-
-    return {
-        "slots_len": slots_len,
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
-        "token_type_ids": token_type_ids,
-        "slots": slots,
-        "intent": intent,
-    }
+# Replace the default formatter with our custom one
+formatter = EmojiFormatter(datefmt="%Y-%m-%d %H:%M:%S")  # Optional: Customize timestamp
+for handler in logger.handlers:
+    handler.setFormatter(formatter)

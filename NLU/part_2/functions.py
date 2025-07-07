@@ -1,94 +1,97 @@
+import logging
+import os
 from collections import Counter
-from sklearn.metrics import classification_report
-from tqdm import tqdm
-from conll import evaluate
+from datetime import datetime
+from typing import List, Optional
+
+import numpy as np
 import torch
+import torch.nn as nn
+from conll import evaluate
 from model import IntentSlotModel
+from sklearn.metrics import classification_report
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter  # type: ignore
+from tqdm import tqdm
+from transformers import get_linear_schedule_with_warmup
+from utils import (Batch, Common, ExperimentConfig, Lang,
+                   get_dataloaders_and_lang)
 
 
 def calculate_loss(
-    data,
-    intent_loss_fn,
-    slot_loss_fn,
-    intent_logits,
-    slot_logits,
-    intent_labels,
-    slot_labels,
-    slots2id,
-    id2slots,
-    id2intent,
+    batch: Batch,
+    lang: Lang,
+    slot_logits: torch.Tensor,
+    intent_logits: torch.Tensor,
 ):
-    """
-    Calculate the combined loss for intent classification and slot filling.
-    Args:
-        intent_loss_fn (callable): Loss function for intent classification.
-        slot_loss_fn (callable): Loss function for slot filling.
-        intent_logits (torch.Tensor): Logits output from the model for intent classification.
-        slot_logits (torch.Tensor): Logits output from the model for slot filling.
-        intent_labels (torch.Tensor): Ground truth labels for intent classification.
-        slot_labels (torch.Tensor): Ground truth labels for slot filling.
-        slots2id (dict): Dictionary mapping slot names to their corresponding IDs.
-    Returns:
-        torch.Tensor: Combined loss for intent classification and slot filling.
-    """
+    # Target loss
+    slot_targets = batch.y_slots.view(-1)
 
-    intent_count = Counter(data["intent"].tolist())
-    intent_weights = (
-        torch.tensor([1 / (intent_count[x] + 1) for x in id2intent.keys()])
-        .float()
-        .to("cuda")
-    )
-    criterion_intents = torch.nn.CrossEntropyLoss(weight=intent_weights)
+    criterion_slots = nn.CrossEntropyLoss(ignore_index=lang.slot2id["pad"])
 
-    slot_count = Counter(data["slots"].flatten().tolist())
-    slot_weights = (
-        torch.tensor([1 / (slot_count[x] + 1) for x in id2slots.keys()])
-        .float()
-        .to("cuda")
-    )
-    criterion_slots = torch.nn.CrossEntropyLoss(
-        weight=slot_weights, ignore_index=slots2id["pad"]
-    )
+    slot_logits = slot_logits.view(-1, len(lang.slot2id))
+    loss_slot = criterion_slots(slot_logits, slot_targets)
 
-    loss_intent = criterion_intents(intent_logits, intent_labels)
-    loss_slot = criterion_slots(
-        slot_logits.view(-1, len(slots2id)), slot_labels.view(-1)
-    )
+    # Intent loss
+    intent_targets = batch.intents
+    criterion_intents = nn.CrossEntropyLoss()
+    intent_logits = intent_logits.view(-1, len(lang.intent2id))
+    loss_intent = criterion_intents(intent_logits, intent_targets)
 
     loss = loss_intent + loss_slot
 
     return loss
 
 
-def eval_loop(
+def train_loop(
+    data: DataLoader,
+    optimizer: torch.optim.Optimizer,
     model: IntentSlotModel,
-    dataloader,
-    intent_loss_fn,
-    slot_loss_fn,
-    tokenizer,
-    id2slots,
-    slots2id,
-    id2intent,
+    lang: Lang,
+    scheduler,
+    grad_clip: bool,
 ):
     """
-    Evaluate the performance of an intent and slot filling model on a given dataset.
-    Args:
-        model (IntentSlotModel): The model to evaluate.
-        dataloader (DataLoader): DataLoader providing the evaluation data.
-        intent_loss_fn (callable): Loss function for intent classification.
-        slot_loss_fn (callable): Loss function for slot filling.
-        tokenizer (Tokenizer): Tokenizer used to decode input_ids.
-        id2slots (dict): Mapping from slot IDs to slot labels.
-        slots2id (dict): Mapping from slot labels to slot IDs.
-    Returns:
-        tuple: A tuple containing:
-            - accuracy_intention (float): Accuracy of the intent classification.
-            - f1_slot (float): F1 score of the slot filling.
-            - total_loss (list): List of loss values for each batch.
-    """
+    Basic training loop
 
+    Args:
+        are typed.
+    """
+    model.train()
+    loss_array = []
+    sample: Batch
+
+    batch_tqdm = tqdm(enumerate(data), desc=f"Batch | Loss: {0:.4f}", leave=False)
+
+    for _, sample in batch_tqdm:
+        optimizer.zero_grad()  # Zeroing the gradient
+        intent_logits, slot_logits = model(sample.utterances, sample.attention_masks)
+
+        loss = calculate_loss(sample, lang, slot_logits, intent_logits)
+
+        batch_tqdm.set_description(f"Batch | Loss: {loss.item():.4f}")
+        loss_array.append(loss.item())
+
+        loss.backward()
+        if grad_clip:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optimizer.step()
+
+        if scheduler:
+            scheduler.step()
+
+    return loss_array
+
+
+def eval_loop(model: IntentSlotModel, data: DataLoader, lang: Lang):
+    """
+    Basic evaluation loop
+
+    Args:
+        are typed.
+    """
     model.eval()
-    total_loss = []
+    loss_array = []
 
     ref_intents = []
     hyp_intents = []
@@ -96,136 +99,231 @@ def eval_loop(
     ref_slots = []
     hyp_slots = []
 
-    with torch.no_grad():
-        for data in dataloader:
-            input_ids = data["input_ids"]
-            attention_mask = data["attention_mask"]
-            token_type_ids = data["token_type_ids"]
-            intent_labels = data["intent"]
-            slot_labels = data["slots"]
-            slots_len = data["slots_len"]
-
-            # Forward pass
+    with torch.no_grad():  # It used to avoid the creation of computational graph
+        sample: Batch
+        for sample in data:
             intent_logits, slot_logits = model(
-                input_ids, attention_mask, token_type_ids
+                sample.utterances, sample.attention_masks
             )
+
             loss = calculate_loss(
-                data=data,
-                intent_loss_fn=intent_loss_fn,
-                intent_logits=intent_logits,
-                intent_labels=intent_labels,
-                slot_loss_fn=slot_loss_fn,
+                batch=sample,
+                lang=lang,
                 slot_logits=slot_logits,
-                slot_labels=slot_labels,
-                slots2id=slots2id,
-                id2slots=id2slots,
-                id2intent=id2intent,
-            ).item()
-            total_loss.append(loss)
+                intent_logits=intent_logits,
+            )
+            loss_array.append(loss.item())
 
             # Intent inference
-            intent_hyp = torch.argmax(intent_logits, dim=1)
-            ref_intents.extend(intent_labels.cpu().tolist())
-            hyp_intents.extend(intent_hyp.cpu().tolist())
+            out_intents = [
+                lang.id2intent[x] for x in torch.argmax(intent_logits, dim=1).tolist()
+            ]
+            gt_intents = [lang.id2intent[x] for x in sample.intents.tolist()]
+            ref_intents.extend(gt_intents)
+            hyp_intents.extend(out_intents)
 
-            # Slot filling inference
-            slot_hyp = torch.argmax(slot_logits, dim=2)
+            # Slot inference
+            output_slots = torch.argmax(slot_logits, dim=2)
 
-            for i in range(input_ids.size(0)):
-                seq_length = slots_len[i]
-                utterance = tokenizer.tokenize(
-                    tokenizer.decode(
-                        input_ids[i].cpu().tolist(), include_special_tokens=False
+            for i in range(sample.utterances.size(0)):
+                sequence_length = int(sample.slots_len[i].item())
+
+                utterance = lang.tokenizer.tokenize(
+                    lang.tokenizer.decode(
+                        sample.utterances[i].cpu().tolist(),
+                        include_special_tokens=False,
                     )
-                )[:seq_length]
+                )[:sequence_length]
 
-                tmp_ref = [
-                    (utterance[j], id2slots[slot_labels[i][j].item()])
-                    for j in range(seq_length)
-                ]
-                tmp_hyp = [
-                    (utterance[j], id2slots[slot_hyp[i][j].item()])
-                    for j in range(seq_length)
-                ]
+                tmp_ref = []
+                tmp_hyp = []
+                for j in range(sequence_length):
+                    if sample.y_slots[i][j].item() == lang.pad_token:
+                        # Skip padding tokens
+                        continue
+
+                    tmp_ref.append(
+                        (utterance[j], lang.id2slot[sample.y_slots[i][j].item()])
+                    )
+                    tmp_hyp.append(
+                        (utterance[j], lang.id2slot[output_slots[i][j].item()])
+                    )
 
                 ref_slots.append(tmp_ref)
                 hyp_slots.append(tmp_hyp)
 
+    # Compute the F1 score for the slots
+    try:
         f1_slot = evaluate(ref_slots, hyp_slots)
+    except Exception as ex:
+        # Sometimes the model predicts a class that is not in REF
+        logging.warning("\nWarning:", ex)
+        ref_s = set([x[1] for x in ref_slots])
+        hyp_s = set([x[1] for x in hyp_slots])
+        logging.warning(hyp_s.difference(ref_s))
+        f1_slot = {"total": {"f": 0}}
 
-        accuracy_intention = classification_report(
-            ref_intents,
-            hyp_intents,
-            output_dict=True,
-            zero_division=False,
-        )["accuracy"]
+    accuracy_intention = classification_report(  # type: ignore
+        ref_intents,
+        hyp_intents,
+        output_dict=True,
+        zero_division=False,
+    )["accuracy"]
 
-        return accuracy_intention, f1_slot["total"]["f"], total_loss
+    return float(f1_slot["total"]["f"]), float(accuracy_intention), loss_array
 
 
-def train_loop(
-    model: IntentSlotModel,
-    train_dataloader,
-    optimizer,
-    intent_loss_fn,
-    slot_loss_fn,
-    slots2id,
-    id2slots,
-    id2intent,
-    tokenizer,
-    scheduler=None,
-    grad_clip=False,
+def run_experiment(
+    train_loader: DataLoader,
+    dev_loader: DataLoader,
+    test_loader: DataLoader,
+    lang: Lang,
+    experiment_config: ExperimentConfig,
+    device: torch.device,
+    writer: SummaryWriter,
+    file_name: str = "",
 ):
     """
-    Trains the given model for one epoch using the provided dataloader, optimizer, and loss functions.
-    Args:
-        model (IntentSlotModel): The model to be trained.
-        train_dataloader (DataLoader): DataLoader for the training data.
-        optimizer (torch.optim.Optimizer): Optimizer for updating model parameters.
-        intent_loss_fn (callable): Loss function for intent classification.
-        slot_loss_fn (callable): Loss function for slot filling.
-        slots2id (dict): Dictionary mapping slot labels to their corresponding IDs.
-        scheduler (torch.optim.lr_scheduler, optional): Learning rate scheduler. Defaults to None.
-        grad_clip (bool, optional): Whether to apply gradient clipping. Defaults to False.
-    Returns:
-        list: List of loss values for each batch.
+    Run a single experiment with the given configuration.
+    It also creates a TensorBoard writer and logs hyperparams + results.
+
+    Args are self-explanatory and typed.
     """
 
-    model.train()
+    model = IntentSlotModel(
+        slot_len=len(lang.slot2id), intent_len=len(lang.intent2id)
+    ).to(device)
 
-    loss_array = []
-    batch_tqdm = tqdm(
-        enumerate(train_dataloader), desc=f"Batch | Loss: {0:.4f}", leave=False
+    optimizer = torch.optim.Adam(model.parameters(), lr=experiment_config.lr)
+
+    patience = experiment_config.patience
+    best_model_state: Optional[dict] = None
+    top_score = -np.inf
+
+    if experiment_config.scheduler:
+        scheduler = get_linear_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=(
+                int(0.1 * experiment_config.n_epochs)
+                if experiment_config.n_epochs > 10
+                else 4
+            ),
+            num_training_steps=experiment_config.n_epochs * len(train_loader),
+        )
+    else:
+        scheduler = None
+
+    for x in tqdm(range(1, experiment_config.n_epochs)):
+        loss = train_loop(
+            train_loader,
+            optimizer,
+            model,
+            lang,
+            scheduler=scheduler,
+            grad_clip=experiment_config.grad_clip,
+        )
+
+        if experiment_config.log_inner:
+            writer.add_scalar("loss/train", np.asarray(loss).mean(), x)
+
+        if x % 1 == 0:
+            results_dev, intent_res, loss_dev = eval_loop(
+                model=model, data=dev_loader, lang=lang
+            )
+
+            if experiment_config.log_inner:
+                writer.add_scalar("loss/dev", np.asarray(loss_dev).mean(), x)
+                writer.add_scalar("dev/slot_f1_dev", results_dev, x)
+                writer.add_scalar("dev/intent_acc_dev", intent_res, x)  # type: ignore
+
+            best_score = (results_dev + intent_res) / 2
+
+            # For decreasing the patience you can also use the average between slot f1 and intent accuracy
+            if (results_dev + intent_res) / 2 > top_score:
+                top_score = best_score
+                # Here you should save the model
+                patience = experiment_config.patience
+                with torch.no_grad():
+                    best_model_state = model.state_dict()
+            else:
+                patience -= 1
+            if patience <= 0:  # Early stopping with patience
+                break  # Not nice but it keeps the code clean
+
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
+
+        results_test, intent_test, _ = eval_loop(
+            model=model, data=test_loader, lang=lang
+        )
+        if experiment_config.log_inner:
+            model_path = os.path.join(file_name, "model.pt")
+            torch.save(model.state_dict(), model_path)
+
+        return results_test, intent_test  # type: ignore
+
+
+def experiment_launcher(
+    experiment_config: List[ExperimentConfig], common: Common, device: torch.device
+):
+    """
+    Launch experiments given the list of experiments.
+
+    Args are self-explanatory and typed.
+    """
+
+    train_loader, dev_loader, test_loader, lang = get_dataloaders_and_lang(
+        common, device=device
     )
 
-    for _, data in batch_tqdm:
-        optimizer.zero_grad()
-        intent_logits, slot_logits = model(
-            data["input_ids"], data["attention_mask"], data["token_type_ids"]
+    for experiment in experiment_config:
+
+        file_name = os.path.join(
+            "runs",
+            (f"{datetime.now().strftime('%Y%m%d%H%M%S')}-{experiment.name}"),
         )
+        writer = SummaryWriter(file_name)
 
-        loss = calculate_loss(
-            data=data,
-            intent_loss_fn=intent_loss_fn,
-            intent_logits=intent_logits,
-            intent_labels=data["intent"],
-            slot_loss_fn=slot_loss_fn,
-            slot_logits=slot_logits,
-            slot_labels=data["slots"],
-            slots2id=slots2id,
-            id2slots=id2slots,
-            id2intent=id2intent,
-        )
+        hparams = {
+            "n_runs": experiment.n_runs,
+            "epochs": experiment.n_epochs,
+            "lr": experiment.lr,
+            "grad_clip": experiment.grad_clip,
+            "scheduler": experiment.scheduler,
+        }
 
-        loss.backward()
-        if grad_clip:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
+        # Metrics (required by add_hparams, even if dummy values)
+        metrics = {
+            "hparam/dummy_metric": 0.0,  # Placeholder
+        }
 
-        if scheduler is not None:
-            scheduler.step()
+        writer.add_hparams(hparams, metrics)
 
-        batch_tqdm.set_description(f"Batch | Loss: {loss.item():.4f}")
-        loss_array.append(loss.item())
+        f1, accuracy = [], []
+        for run in range(experiment.n_runs):
+            logging.info(
+                f"Running experiment with config: {str(experiment)} - Run {run + 1}"
+            )
 
-    return loss_array
+            f1_run, acc_run = run_experiment(  # type: ignore
+                train_loader,
+                dev_loader,
+                test_loader,
+                lang,
+                experiment,
+                device,
+                writer,
+                file_name,
+            )
+            f1.append(f1_run)
+            accuracy.append(acc_run)
+
+            experiment.log_inner = False  # Disable inner logging after the first run
+
+        slot_f1s = np.asarray(f1)
+        intent_accs = np.asarray(accuracy)
+
+        writer.add_scalar("results/test_slot_f1_mean", slot_f1s.mean())
+        writer.add_scalar("results/test_slot_f1_std", slot_f1s.std())
+        writer.add_scalar("results/test_intent_acc_mean", intent_accs.mean())
+        writer.add_scalar("results/test_intent_acc_std", intent_accs.std())

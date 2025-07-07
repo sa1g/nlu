@@ -1,8 +1,7 @@
-import logging
 import re
 
 """
-Modified version of https://pypi.org/project/conlleval/
+Source https://pypi.org/project/conlleval/
 """
 
 
